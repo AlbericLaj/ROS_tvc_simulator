@@ -1,0 +1,11 @@
+# Environment parameters
+ground_altitude: 1567
+latitude: 46.90479
+longitude: 8.07575
+temperature: 300
+humidity: 0.5
+pressure: 84972.484
+apogee:
+  - 0
+  - 0
+  - 1000
