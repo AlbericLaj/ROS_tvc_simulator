@@ -224,6 +224,9 @@ target_link_libraries(control ${catkin_LIBRARIES})
 add_executable(guidance src/guidance.cpp)
 target_link_libraries(guidance ${catkin_LIBRARIES})
 
+add_executable(data_fusion src/data_fusion.cpp)
+target_link_libraries(data_fusion ${catkin_LIBRARIES})
+
 add_executable(visualization src/visualization.cpp)
 target_link_libraries(visualization ${catkin_LIBRARIES})
 

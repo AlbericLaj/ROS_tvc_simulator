@@ -243,7 +243,7 @@ if __name__ == '__main__':
 		# Parse sensor data and publish it on /sensor_pub topic
 		current_sensor = Sensor()
 		
-		[IMU_acc, IMU_gyro, baro_heigth] = rocket_sim.rocket.get_sensor_data()
+		[IMU_acc, IMU_gyro, baro_height] = rocket_sim.rocket.get_sensor_data()
 
 		current_sensor.IMU_acc.x = IMU_acc[0]
 		current_sensor.IMU_acc.y = IMU_acc[1]
@@ -253,7 +253,7 @@ if __name__ == '__main__':
 		current_sensor.IMU_gyro.y = IMU_gyro[1]
 		current_sensor.IMU_gyro.z = IMU_gyro[2]
 
-		current_sensor.baro_heigth = baro_heigth
+		current_sensor.baro_height = baro_height
 
 		sensor_pub.publish(current_sensor)
 

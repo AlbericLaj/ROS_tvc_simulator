@@ -75,7 +75,7 @@ class Rocket:
 
         self.IMU_acc = np.zeros(3)
         self.IMU_gyro = np.zeros(3)
-        self.baro_heigth = 0
+        self.baro_height = 0
 
     # ------------------
     # METHODS
@@ -107,10 +107,10 @@ class Rocket:
     def set_sensor_data(self, v_dot, w, z, R):
         self.IMU_acc = v_dot.dot(R)
         self.IMU_gyro = w.dot(R)
-        self.baro_heigth = z
+        self.baro_height = z
 
     def get_sensor_data(self):
-        return [self.IMU_acc, self.IMU_gyro, self.baro_heigth]
+        return [self.IMU_acc, self.IMU_gyro, self.baro_height]
 
     def add_lugs(self, lugs: list):
         self.lug_n = lugs[0]
