@@ -23,6 +23,7 @@ import rospy
 from tvc_simulator.msg import FSM
 from tvc_simulator.msg import State
 from tvc_simulator.msg import Control
+from tvc_simulator.msg import Sensor
 
 import numpy as np
 import math
@@ -49,35 +50,18 @@ from Functions.Models.stdAtmosUS import stdAtmosUS
 from Simulator3D import Simulator3D
 from Functions.Models.stdAtmos import stdAtmos
 
-# Create global control variables
-thrust_force = np.array([0, 0, 0])
-thrust_torque = np.array([0, 0, 0])
 
-# Create global variable fsm
-current_fsm = FSM()
 
 def control_callback(control):
-	thrust_force[0] = control.force.x
-	thrust_force[1] = control.force.y
-	thrust_force[2] = control.force.z
+	global current_control
+	current_control = control
 
-	thrust_torque[0] = control.torque.x 
-	thrust_torque[1] = control.torque.y 
-	thrust_torque[2] = control.torque.z
-
-	#rospy.loginfo(thrust_force)
-	#rospy.loginfo(thrust_torque)
- 
 def disturbance_callback(chaos):
-	thrust_force[0] += chaos.force.x
-	thrust_force[1] += chaos.force.y
-	thrust_force[2] += chaos.force.z
-
-	thrust_torque[0] += chaos.torque.x 
-	thrust_torque[1] += chaos.torque.y 
-	thrust_torque[2] += chaos.torque.z
+	global current_disturbance
+	current_disturbance = chaos
 
 def fsm_callback(fsm):
+	global current_fsm
 	current_fsm.time_now = fsm.time_now
 	current_fsm.state_machine = fsm.state_machine
 
@@ -140,7 +124,15 @@ def init_integrator():
 	
 
 if __name__ == '__main__':
-	
+
+	# Creates global variables
+	current_disturbance = Control()
+
+	current_control = Control()
+
+	current_fsm = FSM()
+
+	# Init ROS
 	rospy.init_node('integrator', anonymous=True)
 
 	# Init global variable
@@ -159,8 +151,11 @@ if __name__ == '__main__':
 	# Publisher for rocket state
 	rocket_state_pub = rospy.Publisher('rocket_state', State, queue_size=10)
 
+	# Publisher for fake rocket sensor data
+	sensor_pub = rospy.Publisher('sensor_pub', Sensor, queue_size=10)
+
 	# Time step between integration in [s], used for thread frequency and integration time
-	integration_period = 0.050 
+	integration_period = 0.10 
 	rate = rospy.Rate(1/integration_period) # in Hz
 
 	# Simulation object
@@ -179,8 +174,33 @@ if __name__ == '__main__':
 		if current_fsm.state_machine == "Idle":
 			S_new = S_new
 
-		elif current_fsm.state_machine == "Launch":
-			 
+		else:
+			thrust_force = np.zeros(3)
+			thrust_torque = np.zeros(3)
+
+      # Force and torque is sum of control and disturbance
+			if current_fsm.state_machine == "Launch":
+
+				thrust_force[0] = current_control.force.x + current_disturbance.force.x
+				thrust_force[1] = current_control.force.y + current_disturbance.force.y
+				thrust_force[2] = current_control.force.z + current_disturbance.force.z
+
+				thrust_torque[0] = current_control.torque.x + current_disturbance.torque.x
+				thrust_torque[1] = current_control.torque.y + current_disturbance.torque.y
+				thrust_torque[2] = current_control.torque.z + current_disturbance.torque.z
+
+      # Force and torque is only disturbance (no more fuel for control)
+			elif current_fsm.state_machine == "Coast":
+
+				thrust_force[0] = current_disturbance.force.x
+				thrust_force[1] = current_disturbance.force.y
+				thrust_force[2] = current_disturbance.force.z
+
+				thrust_torque[0] = current_disturbance.torque.x
+				thrust_torque[1] = current_disturbance.torque.y
+				thrust_torque[2] = current_disturbance.torque.z
+		  
+      # Now do the integrationwith computed force and torque 
 			start_time = rospy.get_time()
 			
 			# Actual integration of the state "S_new" using the control law
@@ -191,21 +211,10 @@ if __name__ == '__main__':
 			T_new = integration_ivp.t[-1]
 
 			# Used to time integration process
-			rospy.loginfo(1000*(rospy.get_time()-start_time))
+			#rospy.loginfo(1000*(rospy.get_time()-start_time))
 		
-		elif current_fsm.state_machine == "Coast":
-      
-			start_time = rospy.get_time()
-			
-			# Actual integration of the state "S_new" with control = 0
-			integration_ivp = solve_ivp(rocket_sim.Dynamics_6DOF, [T_new, T_new+integration_period], S_new, method = 'RK23', args = (np.zeros(3), np.zeros(3)))
 
-			# Get final state and time to be used for next iteration
-			S_new = integration_ivp.y[:, -1]
-			T_new = integration_ivp.t[-1]
-
-			# Used to time integration process
-			rospy.loginfo(1000*(rospy.get_time()-start_time))
+ 
       
 		# Parse state and publish it on the /rocket_state topic
 		rocket_state = State()
@@ -230,4 +239,21 @@ if __name__ == '__main__':
 		rocket_state.propeller_mass = S_new[13]
 		
 		rocket_state_pub.publish(rocket_state)
+
+		# Parse sensor data and publish it on /sensor_pub topic
+		current_sensor = Sensor()
+		
+		[IMU_acc, IMU_gyro, baro_heigth] = rocket_sim.rocket.get_sensor_data()
+
+		current_sensor.IMU_acc.x = IMU_acc[0]
+		current_sensor.IMU_acc.y = IMU_acc[1]
+		current_sensor.IMU_acc.z = IMU_acc[2]
+
+		current_sensor.IMU_gyro.x = IMU_gyro[0]
+		current_sensor.IMU_gyro.y = IMU_gyro[1]
+		current_sensor.IMU_gyro.z = IMU_gyro[2]
+
+		current_sensor.baro_heigth = baro_heigth
+
+		sensor_pub.publish(current_sensor)
 

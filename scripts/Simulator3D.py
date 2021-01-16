@@ -5,6 +5,8 @@
 import numpy as np
 import numpy.linalg as lin
 import math
+import time
+
 from scipy.integrate import ode, solve_ivp
 from dataclasses import dataclass
 
@@ -100,12 +102,12 @@ class Simulator3D:
         return x_dot, v_dot
 
     def Dynamics_6DOF(self, t, s, thrust_force, thrust_torque):
+        #start_time = time.time() # -----------------------------------------------------------------
         x = s[0:3]
         v = s[3:6]
         q = s[6:10]
         w = s[10:13]
         propellant_mass = s[13]
-
 
 
         # Normalise quaternion
@@ -125,28 +127,24 @@ class Simulator3D:
         ye = np.array([0, 1, 0]).transpose()
         ze = np.array([0, 0, 1]).transpose()
 
-        # Rocket inertia and properties
-        #mass_properties = Mass_Properties(t, self.rocket, "NonLinear")
-        #m = mass_properties[0]
-        #dMdt = mass_properties[1]
-        #cg = mass_properties[2]
-        #I_L = mass_properties[4]
-        #I_R = mass_properties[6]
-        #Sm = self.rocket.get_max_cross_section_surface
-        #I = c.transpose().dot([[I_L, 0, 0], [0, I_L, 0], [0, 0, I_R]]).dot(c)
-				
+				# Mass properties				
         m = self.rocket.get_empty_mass() + propellant_mass
         dMdt = -np.linalg.norm(thrust_force)/(self.rocket.get_motor_Isp()*9.81)
         cg = (self.rocket.get_dry_cg()*self.rocket.get_empty_mass() + self.rocket.get_propellant_cg()*propellant_mass)/m
-        Sm = 0.018
+        Sm = self.rocket.get_max_cross_section_surface
         I = c.transpose().dot(self.rocket.get_rocket_inertia()).dot(c)
 
 
         # Environment
         g = 9.81  # Gravity [m/s^2]
         rho = self.Environment.get_density(x[2] + self.Environment.ground_altitude)
-        nu = self.Environment.get_viscosity(x[2] + self.Environment.ground_altitude)
+
+        nu = self.Environment.get_viscosity(x[2] + self.Environment.ground_altitude) # !!! take 200 us
+
         a = self.Environment.get_speed_of_sound(x[2] + self.Environment.ground_altitude)
+
+
+				# Force computation: Thrust, gravity, drag and lift --------------------------
 
         # Thrust
         # X, Y, Z force in rocket frame, reoriented to world frame
@@ -158,9 +156,11 @@ class Simulator3D:
         # Aerodynamic corrective forces
         # Compute center of mass angle of attack
         v_cm = v - wind_model(t, self.Environment.get_turb(x[2] + self.Environment.ground_altitude),
-                              self.Environment.get_V_inf()*self.Environment.V_dir, self.Environment.get_turb_model(), x[2]) # TODO : V_dir
+                              self.Environment.get_V_inf()*self.Environment.V_dir, 'None' , x[2]) # TODO : V_dir
+
+
         v_cm_mag = np.linalg.norm(v_cm)
-        alpha_cm = math.atan2(np.linalg.norm(np.cross(ra, v_cm)), np.dot(ra, v_cm))
+        alpha_cm = math.atan2(np.linalg.norm(np.cross(ra, v_cm)), np.dot(ra, v_cm)) # !!! take 200 us
 
         # Mach number
         Mach = v_cm_mag / a
@@ -198,16 +198,12 @@ class Simulator3D:
 
         # Drag
         # Drag coefficient
-        cd = drag(self.rocket, alpha, v_mag, nu, a)*self.rocket.CD_fac  # TODO : * cd_fac (always 1 ?)
-        ab_phi = -230  # TODO : find a way to deal with airbrakes, /!\ magic number
-        if t > self.rocket.get_burn_time():
-            cd = cd + drag_shuriken(self.rocket, ab_phi, alpha, v_mag, nu)
+        cd = drag(self.rocket, alpha, v_mag, nu, a)*self.rocket.CD_fac  # !!! take 3000 us !!! -> actually half of the computation time
 
         # Drag force
         d = -0.5 * rho * Sm * cd * v_mag ** 2 * v_norm
 
         # Total forces
-        motor_fac = 1  # TODO : always 1 ?
         f_tot = T + G + n + d
 
         # Moment estimation
@@ -221,7 +217,6 @@ class Simulator3D:
         md = -0.5 * rho * cdm * Sm * v_mag ** 2 * normalize_vector(w_pitch)
 
         m_tot = mn + md + thrust_torque
-        #print(mn)
 
         # Translational dynamics
         X_dot = v
@@ -231,18 +226,10 @@ class Simulator3D:
         q_dot = quat_evolve(q, w)
         w_dot = np.linalg.lstsq(I, m_tot, rcond=None)[0]
 
-        #tmp_Margin = margin / np.max(self.rocket.diameters)
-        #tmp_Alpha = alpha
-        #tmp_Cn_alpha = CNa
-        #tmp_Xcp = Xcp
-        #tmp_Cd = cd
-        #tmp_Mass = m
-        #tmp_CM = cg
-        #tmp_Il = I_L
-        #tmp_Ir = I_R
-        #tmp_Delta = delta
-
         S_dot = np.concatenate((X_dot, V_dot, q_dot, w_dot, np.array([dMdt])))
+        #print(1e6*(time.time()-start_time)) # -----------------------------------------------------------------	
+
+        self.rocket.set_sensor_data(V_dot, w, x[2], c)
 
         return S_dot
 

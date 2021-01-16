@@ -73,6 +73,10 @@ class Rocket:
         # Arbitrary, based on M3 launch lugs in Cernier 23/03/2019; 1.61e-4 for M2
         # TODO: Implement this parameter in the definition of the body and then for the rocket as a whole
 
+        self.IMU_acc = np.zeros(3)
+        self.IMU_gyro = np.zeros(3)
+        self.baro_heigth = 0
+
     # ------------------
     # METHODS
     # ------------------
@@ -99,6 +103,14 @@ class Rocket:
             self.diameters_position = stage.body.diameters_position
 
         self.L = self.diameters_position[-1]
+
+    def set_sensor_data(self, v_dot, w, z, R):
+        self.IMU_acc = v_dot.dot(R)
+        self.IMU_gyro = w.dot(R)
+        self.baro_heigth = z
+
+    def get_sensor_data(self):
+        return [self.IMU_acc, self.IMU_gyro, self.baro_heigth]
 
     def add_lugs(self, lugs: list):
         self.lug_n = lugs[0]

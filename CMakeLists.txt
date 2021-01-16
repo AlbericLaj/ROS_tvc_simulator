@@ -56,6 +56,7 @@ find_package(catkin REQUIRED COMPONENTS
 	State.msg
 	FSM.msg
   Waypoint.msg
+	Sensor.msg
 )
 
 ## Generate services in the 'srv' folder
