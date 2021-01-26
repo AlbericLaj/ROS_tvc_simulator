@@ -1,6 +1,30 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(tvc_simulator)
 
+set(CMAKE_MODULE_PATH /usr/local/share/cmake/Modules/)
+
+find_package(Eigen3 REQUIRED NO_MODULE)
+
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror")
+set(CMAKE_VERBOSE_MAKEFILE “ON”)
+
+option(BUILD_RELEASE "Build release version w/o debugging symbols" ON)
+if(BUILD_RELEASE)
+  set(CMAKE_BUILD_TYPE "Release")
+else()
+  set(CMAKE_BUILD_TYPE "Debug")
+endif()
+
+add_definitions(-DEIGEN_STACK_ALLOCATION_LIMIT=1000000) # 1 MB
+
+
+
+add_subdirectory(submodule/polympc)
+include_directories(submodule/polympc/src src)
+
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 
