@@ -18,8 +18,8 @@ import time
 
 import rosbag
 
-tStart = 5
-tEnd = 200
+tStart = 9
+tEnd = 60
 
 position = np.zeros((1,3))
 speed = np.zeros((1,3))
@@ -80,7 +80,7 @@ omega = np.rad2deg(omega)
 select = np.logical_and(time_state>tStart, time_state <tEnd)
 select_force = np.logical_and(time_force>tStart, time_force <tEnd)
 
-fig, axe = plt.subplots(3,3, figsize=(15,10))
+fig, axe = plt.subplots(3,4, figsize=(15,10))
 l = axe[0][0].plot(time_state[select], position[:, 0:2][select])
 axe[0][0].legend(l, ('X position [m]', 'Y position [m]'))
 
@@ -94,15 +94,27 @@ axe[1][0].legend(l, ('X speed [m/s]', 'Y speed [m]'))
 l = axe[1][1].plot(time_state[select], speed[:, 2][select],  label = 'Z speed [m/s]')
 axe[1][1].legend()
 
-l = axe[0][2].plot(time_state[select], attitude[select]) 
-axe[0][2].legend(l, ('X [degree]', 'Y [degree]', 'Z [degree]'))
+l = axe[0][2].plot(time_state[select], attitude[:, 0:2][select]) 
+axe[0][2].axhline(y=-180, color='r', linestyle='--')
+axe[0][2].axhline(y=180, color='r', linestyle='--')
+axe[0][2].legend(l, ('X [degree]', 'Y [degree]'))
 
-l = axe[1][2].plot(time_state[select], omega[select])
-axe[1][2].legend(l, ('X speed [deg/s]', 'Y speed [deg/s]', 'Z speed [deg/s]'))
+l = axe[0][3].plot(time_state[select], attitude[:, 2][select],  label = 'Z [degree]', color = "green")
+axe[0][3].axhline(y=-180, color='r', linestyle='--')
+axe[0][3].axhline(y=180, color='r', linestyle='--')
+axe[0][3].legend()
+
+l = axe[1][2].plot(time_state[select], omega[:, 0:2][select])
+axe[1][2].legend(l, ('X speed [deg/s]', 'Y speed [deg/s]'))
+
+l = axe[1][3].plot(time_state[select], omega[:, 2][select],  label = 'Z speed [deg/s]', color = "green")
+axe[1][3].legend()
 
 l = axe[2][2].plot(time_force[select_force], control_force[:, 0:2][select_force])
-l = axe[2][2].plot(time_force[select_force], z_torque[select_force])
-axe[2][2].legend(l, ('X force [N]', 'Y force [N]', 'Z torque [N.m]'))
+axe[2][2].legend(l, ('X force [N]', 'Y force [N]'))
+
+l = axe[2][3].plot(time_force[select_force], z_torque[select_force], label = 'Z torque [N.m]', color = "green")
+axe[2][3].legend()
 
 l = axe[2][1].plot(time_force[select_force], control_force[:, 2][select_force], label = "Z force [N]")
 axe[2][1].legend()
@@ -110,5 +122,6 @@ axe[2][1].legend()
 l = axe[2][0].plot(time_state[select], prop_mass[select], label = "propellant mass [kg]")
 axe[2][0].legend()
 
+fig.tight_layout()
 
 plt.show()
