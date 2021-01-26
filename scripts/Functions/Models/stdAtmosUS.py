@@ -119,7 +119,7 @@ class stdAtmosUS:
     V_inf = 10
     Rail_Angle = 0
     Rail_Length = 7
-    V_Azimuth = 150
+    V_Azimuth = 0
     Rail_Azimuth = 181
     V_dir = np.array([np.cos(V_Azimuth*np.pi/180), np.sin(V_Azimuth*np.pi/180), 0.0])
 
