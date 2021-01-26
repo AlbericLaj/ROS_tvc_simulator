@@ -216,7 +216,7 @@ class Simulator3D:
         cdm = pitch_damping_moment(self.rocket, rho, CNa_bar, CP_bar, dMdt, cg, np.linalg.norm(w_pitch), v_mag)
         md = -0.5 * rho * cdm * Sm * v_mag ** 2 * normalize_vector(w_pitch)
 
-        m_tot = mn + md + thrust_torque
+        m_tot = mn + md + c.dot(thrust_torque.transpose())
 
         # Translational dynamics
         X_dot = v

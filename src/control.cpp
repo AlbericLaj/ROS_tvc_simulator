@@ -14,7 +14,7 @@
 #include <sstream>
 #include <string>
 
-#define CONTROL_HORIZON 0.5 // In seconds
+#define CONTROL_HORIZON 2 // In seconds
 
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
@@ -205,7 +205,7 @@ public:
 
         // -------------- Simulation variables -----------------------------
         T mass = dry_mass + x(13);                  // Instantaneous mass of the rocket in [kg]
-        Eigen::Array<T, 3, 1> speed; speed << (T)x(3), (T)x(4), (T)x(5);
+        Eigen::Array<T, 3, 1> speed; speed << (T)x(3), (T)x(4), (T)x(5); // Speed in world frame
 
         // Orientation of the rocket with quaternion
         Eigen::Quaternion<T> attitude((T)x(6), (T)x(7), (T)x(8), (T)x(9)); attitude.normalize();
@@ -213,7 +213,7 @@ public:
         // Force in rocket coordinates (drag + thrust) in [N]
         T drag = (T)(0.5*Cd(2)*surface_front*rho_air*x(5)*x(5)); // Big approximation: speed in Z is basically the same between world and rocket
 
-        Eigen::Quaternion<T> rocket_force((T)0, (T)u(0), (T)u(1), (T)(u(2) - drag)); // Drag is along Z axis of rocket, then reorientated
+        Eigen::Quaternion<T> rocket_force((T)0, (T)u(0), (T)u(1), (T)(u(2) - drag)); // Drag and thrust is along Z axis of rocket, then reorientated into world coordinates
         rocket_force = attitude*rocket_force*attitude.inverse();
 
         //std::cout << "Speed: " << speed.transpose() << "\n";
@@ -228,9 +228,9 @@ public:
         Eigen::Matrix<T, 3, 1> total_force;  total_force << (T)rocket_force.x(), (T)rocket_force.y(), (T)rocket_force.z();
         total_force = total_force - gravity;
 
-        // Total torque in 3D in [N.m]
-        Eigen::Matrix<T, 3, 1> total_torque;
-        total_torque << u(0)*CM, u(1)*CM, u(3);
+        // Angular acceleration in world frame in [rad/s²]
+        Eigen::Quaternion<T> angular_acceleration((T)0, (T)(u(0)*CM/Inertia(0)), (T)(u(1)*CM/Inertia(1)), (T)(u(3)/Inertia(2)));
+        angular_acceleration = attitude*angular_acceleration*attitude.inverse();
 
         // Quaternion derivative over time from angular velocity omega
         Eigen::Quaternion<T> omega((T)0.0, (T)x(10), (T)x(11), (T)x(12));
@@ -256,9 +256,9 @@ public:
         xdot(9) = 0.5*attitude_variation.z();
 
         // Angular speed variation is Torque/Inertia
-        xdot(10) = total_torque(0)/Inertia(0);
-        xdot(11) = total_torque(1)/Inertia(1);
-        xdot(12) = total_torque(2)/Inertia(2);
+        xdot(10) = angular_acceleration.x();
+        xdot(11) = angular_acceleration.y();
+        xdot(12) = angular_acceleration.z();
 
         // Mass variation is proportional to thrust
         xdot(13) = -u(2)/(Isp*g0);
@@ -454,8 +454,9 @@ int main(int argc, char **argv)
 
 		  // Input constraints
 		  Eigen::Matrix<double, 4, 1> lbu, ubu;
-		  lbu << -50, -50.0, 0.0, -50;
-		  ubu << 50, 50.0, 2000.0, 50;
+		  double side_thrust = 40;
+		  lbu << -side_thrust, -side_thrust, 0.0, -50;
+		  ubu << side_thrust, side_thrust, 2000.0, 50;
 
 		  solver.upper_bound_x().tail(44) = ubu.replicate(11,1);
 		  solver.lower_bound_x().tail(44) = lbu.replicate(11,1);
@@ -504,7 +505,7 @@ int main(int argc, char **argv)
 
 			thrust_force.x = control_MPC[0];
 			thrust_force.y = control_MPC[1];
-			//thrust_force.z = control_MPC[2];
+			thrust_force.z = control_MPC[2];
 
 
       if(thrust_force.z > rocket.maxThrust) thrust_force.z = rocket.maxThrust;
