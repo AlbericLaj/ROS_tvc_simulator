@@ -102,7 +102,8 @@ class Simulator3D:
         return x_dot, v_dot
 
     def Dynamics_6DOF(self, t, s, thrust_force, thrust_torque):
-        #start_time = time.time() # -----------------------------------------------------------------
+        start_time = time.time() # -----------------------------------------------------------------
+        
         x = s[0:3]
         v = s[3:6]
         q = s[6:10]
@@ -112,6 +113,7 @@ class Simulator3D:
 
         # Normalise quaternion
         q = normalize_vector(q)
+        
 
         # Rotation matrix from rocket coordinates to Earth coordinates
         c = quat2rotmat(q)
@@ -132,8 +134,8 @@ class Simulator3D:
         dMdt = -np.linalg.norm(thrust_force)/(self.rocket.get_motor_Isp()*9.81)
         cg = (self.rocket.get_dry_cg()*self.rocket.get_empty_mass() + self.rocket.get_propellant_cg()*propellant_mass)/m
         Sm = self.rocket.get_max_cross_section_surface
-        I = c.transpose().dot(self.rocket.get_rocket_inertia()).dot(c)
-
+        #I = c.transpose().dot(self.rocket.get_rocket_inertia()).dot(c)
+        I = c.dot(self.rocket.get_rocket_inertia()).dot(c.transpose())
 
         # Environment
         g = 9.81  # Gravity [m/s^2]
@@ -176,9 +178,12 @@ class Simulator3D:
             w_norm = w / np.linalg.norm(w)
         else:
             w_norm = np.zeros((3, 1))
-
-
-        v_rel = v_cm + margin * math.sin(math.acos(np.dot(ra, w_norm))) * np.cross(ra, w)
+  
+        wind_dir = np.dot(ra, w_norm)
+        if wind_dir >  1: wind_dir =  1
+        if wind_dir < -1: wind_dir = -1
+                
+        v_rel = v_cm + margin * math.sin(math.acos(wind_dir)) * np.cross(ra, w) # center of mass speed
         v_mag = np.linalg.norm(v_rel)
         v_norm = normalize_vector(v_rel)
 
@@ -187,21 +192,22 @@ class Simulator3D:
         v_cross_norm = normalize_vector(v_cross)
         alpha = math.atan2(np.linalg.norm(np.cross(ra, v_norm)), np.dot(ra, v_norm))
         delta = math.atan2(np.linalg.norm(np.cross(ra, ze)), np.dot(ra, ze))
-        #print(delta)
 
         # Normal force
         na = np.cross(ra, v_cross)
         if np.linalg.norm(na) == 0:
-            n = np.array([0, 0, 0]).transpose
+            n = np.array([0, 0, 0]).transpose()
         else:
-            n = 0.5 * rho * Sm * CNa * alpha * v_mag ** 2 * na / np.linalg.norm(na)
+            n = 0.5 * rho * Sm * CNa * alpha * v_mag ** 2 * na/ (np.linalg.norm(na)+0.05) # --> constant added to avoid division by small number
+
 
         # Drag
         # Drag coefficient
         cd = drag(self.rocket, alpha, v_mag, nu, a)*self.rocket.CD_fac  # !!! take 3000 us !!! -> actually half of the computation time
-
+        
         # Drag force
         d = -0.5 * rho * Sm * cd * v_mag ** 2 * v_norm
+        
 
         # Total forces
         f_tot = T + G + n + d
@@ -215,8 +221,10 @@ class Simulator3D:
         w_pitch = w - np.dot(w, ra) * ra
         cdm = pitch_damping_moment(self.rocket, rho, CNa_bar, CP_bar, dMdt, cg, np.linalg.norm(w_pitch), v_mag)
         md = -0.5 * rho * cdm * Sm * v_mag ** 2 * normalize_vector(w_pitch)
+        
 
         m_tot = mn + md + c.dot(thrust_torque.transpose())
+        
 
         # Translational dynamics
         X_dot = v
@@ -227,9 +235,9 @@ class Simulator3D:
         w_dot = np.linalg.lstsq(I, m_tot, rcond=None)[0]
 
         S_dot = np.concatenate((X_dot, V_dot, q_dot, w_dot, np.array([dMdt])))
-        #print(1e6*(time.time()-start_time)) # -----------------------------------------------------------------	
 
         self.rocket.set_sensor_data(V_dot, w, x[2], c)
+        #print(1000*(time.time()-start_time))
 
         return S_dot
 

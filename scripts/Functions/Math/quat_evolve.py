@@ -14,9 +14,13 @@ def quat_evolve(q, w):
     # (c.f. Modeling and Simulation of aerospace
     # vehicle dynamics, second edition p.126, Peter H. Zipfel)
 
-    correction = np.array([[0, w[2], -w[1], w[0]],
-                           [-w[2], 0, w[0], w[1]],
-                           [w[1], -w[0], 0, w[2]],
-                           [-w[0], -w[1], -w[2], 0]])
-
-    return (1 - np.linalg.norm(q)) * q + np.sum(0.5 * correction * q, 1)
+    omega = np.array([[  0  , w[2] , -w[1], -w[0]],
+                      [-w[2],  0   , w[0] , -w[1]],
+                      [w[1] , -w[0],  0   , -w[2]],
+                      [w[0] , w[1] ,  w[2],   0 ]])
+    correction = (1 - np.linalg.norm(q)) * q
+                      
+    q = np.array([q])
+    q_dot = 0.5*np.dot(q,omega)
+                        
+    return (correction  + q_dot[0] )

@@ -162,8 +162,10 @@ if __name__ == '__main__':
 	rocket_sim = init_integrator()
 
 	# Init state (position, speed, quaternion, angular speed)
-	S_new = np.array([0,0,0, 0,0,30,  0, 0, 0, 1,  0, 0, 0, rocket_sim.rocket.get_propellant_mass()])
+	S_new = np.array([0,0,0, 0,0,30,     0.0, 0.0,  0.0,  1.0,      0.0, 0.0, 0.0     , rocket_sim.rocket.get_propellant_mass()])
 	T_new = 0
+	
+	solver_dopri5 =  ode(rocket_sim.Dynamics_6DOF).set_integrator('dopri5') 
 
 	while not rospy.is_shutdown():
 
@@ -188,7 +190,6 @@ if __name__ == '__main__':
 				thrust_torque[0] = current_control.torque.x# + current_disturbance.torque.x
 				thrust_torque[1] = current_control.torque.y# + current_disturbance.torque.y
 				thrust_torque[2] = current_control.torque.z# + current_disturbance.torque.z
-				#print(thrust_torque)
 
       # Force and torque is only disturbance (no more fuel for control)
 			elif current_fsm.state_machine == "Coast":
@@ -209,11 +210,14 @@ if __name__ == '__main__':
 			
 			# Actual integration of the state "S_new" using the control law
 			integration_ivp = solve_ivp(rocket_sim.Dynamics_6DOF, [T_new, T_new+integration_period], S_new, method = 'RK23', args = (thrust_force, thrust_torque))
+			
+			#solver_dopri5.set_initial_value(S_new, T_new).set_f_params(thrust_force, thrust_torque)
+			#S_new = solver_dopri5.integrate(T_new+integration_period)
+			#T_new = T_new + integration_period
 
 			# Get final state and time to be used for next iteration
 			S_new = integration_ivp.y[:, -1]
 			T_new = integration_ivp.t[-1]
-			#S_new[12] = 0
 
 			# Used to time integration process
 			#rospy.loginfo(1000*(rospy.get_time()-start_time))

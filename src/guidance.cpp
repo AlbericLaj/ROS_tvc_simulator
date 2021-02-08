@@ -114,8 +114,7 @@ time_point get_time()
 using Polynomial = polympc::Chebyshev<POLY_ORDER, polympc::GAUSS_LOBATTO, double>;
 using Approximation = polympc::Spline<Polynomial, NUM_SEG>;
 
-POLYMPC_FORWARD_DECLARATION(/*Name*/ guidance_ocp, /*NX*/ 7, /*NU*/ 3, /*NP*/ 0, /*ND*/ 0, /*NG*/0, /*TYPE*/ double) // Was with 4 states, 2 inputs before
-
+POLYMPC_FORWARD_DECLARATION(/*Name*/ guidance_ocp, /*NX*/ 7, /*NU*/ 3, /*NP*/ 0, /*ND*/ 0, /*NG*/0, /*TYPE*/ double)
 using namespace Eigen;
 
 class guidance_ocp : public ContinuousOCP<guidance_ocp, Approximation, SPARSE>
@@ -131,8 +130,8 @@ public:
         P.setIdentity();
         P.diagonal() << 1.0, 1.0, 100, 0.2, 0.2, 0.5, 5.0;
 
-        xs << 0.0, 0.0, 1000.0, 0.0, 0.0, 0.0, 0.0;
-        us << 0.0, 0.0, 40*9.81;
+        xs << 0.0, 0.0, 2000.0, 0.0, 0.0, 0.0, 0.0;
+        us << 0.0, 0.0, 5*40*9.81;
     }
 
     static constexpr double t_start = 0;
@@ -151,10 +150,9 @@ public:
                               const T &t, Eigen::Ref<state_t<T>> xdot) const noexcept
     {
         // -------------- Constant Rocket parameters ----------------------------------------
-        //Eigen::Matrix<double, 7, 1> init_cond; init_cond << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.1;
 
         T dry_mass = (T)40;                         // final rocket mass in [kg]
-        T propeller_mass = (T)3.1;                  // propellant mass in [kg]
+        
 
         T Isp = (T)211;                             // Specific Impulse in [s]
 
@@ -171,7 +169,6 @@ public:
         T g0 = (T)9.81;                             // Earth gravity in [m/s^2]
         //T rho_air = (T)(353*pow(1-0.0000225577*x(2), x(1))/(288.15-0.0065*x(2)));
         T rho_air = (T)1.225;
-        T TIMEUNITS_PER_HOUR = (T)3600.0;           // Conversion hours to seconds
 
         // -------------- Simulation variables -----------------------------
         T mass = dry_mass + x(6);                   // Instantaneous mass of the rocekt in [kg]
@@ -314,10 +311,6 @@ public:
 
 
 
-
-
-
-
 // Callback function to store last received state
 void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
 {
@@ -387,6 +380,8 @@ bool sendWaypoint(tvc_simulator::GetWaypoint::Request &req, tvc_simulator::GetWa
 	return true;
 }
 
+
+
 int main(int argc, char **argv)
 {
 	// Init ROS guidance node
@@ -400,6 +395,9 @@ int main(int argc, char **argv)
 
 	// Create waypoint service
 	ros::ServiceServer waypoint_service = n.advertiseService("getWaypoint", sendWaypoint);
+	
+	// Create waypoint publisher
+	ros::Publisher waypoint_pub = n.advertise<tvc_simulator::Waypoint>("waypoint_pub", 10);
 
 	// Subscribe to state message from simulation
   ros::Subscriber rocket_state_sub = n.subscribe("rocket_state", 100, rocket_stateCallback);
@@ -432,12 +430,23 @@ int main(int argc, char **argv)
 			{
         //affine_guidance(rocket);
 				MPC_guidance();
+				int i;
+				for(i=0; i<N_POINT; i++)
+				{
+            waypoint_pub.publish(trajectory[i]);
+				}
+
 			}
 
       else if (current_fsm.state_machine.compare("Coast") == 0)
 		  {
         //affine_guidance(rocket);
 				MPC_guidance();
+				int i;
+				for(i=0; i<N_POINT; i++)
+				{
+            waypoint_pub.publish(trajectory[i]);
+				}
       }
       // ---------------------------------------------------------
 		
@@ -477,31 +486,44 @@ void affine_guidance(Rocket rocket)
 
 void MPC_guidance()
 {
+
   using admm = boxADMM<guidance_ocp::VAR_SIZE, guidance_ocp::NUM_EQ, guidance_ocp::scalar_t,
                  guidance_ocp::MATRIXFMT, linear_solver_traits<guidance_ocp::MATRIXFMT>::default_solver>;
 
-	MySolver<guidance_ocp, admm> solver;
-	solver.settings().max_iter = 10;
-	solver.settings().line_search_max_iter = 10;
+  MySolver<guidance_ocp, admm> solver_guidance;
 
+	solver_guidance.settings().max_iter = 10;
+	solver_guidance.settings().line_search_max_iter = 10;
+
+  // Input constraints
 	Eigen::Matrix<double, 3, 1> lbu, ubu;
 	lbu << -200.0, -200.0, 0.0;
 	ubu << 200.0, 200.0, 2000.0;
+	
+	// State constraints
+  const double inf = std::numeric_limits<double>::infinity();
+  const double eps = 1e-4;
+  Eigen::Matrix<double, 7, 1> lbx, ubx;
+  lbx << -inf, -inf, 0,   -inf, -inf, 0-eps,   0-eps;
+  ubx << inf,   inf, inf,  inf,  inf, 330+eps, 3.1+eps;
+  solver_guidance.upper_bound_x().head(77) = ubx.replicate(11,1);
+  solver_guidance.lower_bound_x().head(77) = lbx.replicate(11,1);
+  
+  // Init state
+	solver_guidance.upper_bound_x().segment(70, 7) = init_cond;
+	solver_guidance.lower_bound_x().segment(70, 7) = init_cond;
 
-	solver.upper_bound_x().segment(70, 7) = init_cond;
-	solver.lower_bound_x().segment(70, 7) = init_cond;
+	solver_guidance.primal_solution().head<77>() = init_cond.replicate(11, 1);
 
-	solver.primal_solution().head<77>() = init_cond.replicate(11, 1);
-
-	solver.upper_bound_x().tail(33) = ubu.replicate(11,1);
-	solver.lower_bound_x().tail(33) = lbu.replicate(11,1);
+	solver_guidance.upper_bound_x().tail(33) = ubu.replicate(11,1);
+	solver_guidance.lower_bound_x().tail(33) = lbu.replicate(11,1);
 
 	// Solve problem and save solution
 	double time_now = ros::Time::now().toSec();
-	solver.solve();
+	solver_guidance.solve();
 	//ROS_INFO("Solver duration: %f\n",  ros::Time::now().toSec()-time_now);
 
-	Eigen::Matrix<double, 7, 11> trajectory_MPC; trajectory_MPC << Eigen::Map<Eigen::Matrix<double, 7, 11>>(solver.primal_solution().head(77).data(), 7, 11);
+	Eigen::Matrix<double, 7, 11> trajectory_MPC; trajectory_MPC << Eigen::Map<Eigen::Matrix<double, 7, 11>>(solver_guidance.primal_solution().head(77).data(), 7, 11);
 
   // Fill the trajectory points' position
   int i = 0;
@@ -521,6 +543,6 @@ void MPC_guidance()
 
   }
 
-	//std::cout << trajectory[3] << "\n";
+	//std::cout << trajectory[0] << "\n";
 
 }
