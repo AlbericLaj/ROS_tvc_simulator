@@ -4,6 +4,8 @@ project(tvc_simulator)
 set(CMAKE_MODULE_PATH /usr/local/share/cmake/Modules/)
 
 find_package(Eigen3 REQUIRED NO_MODULE)
+find_package(OsqpEigen)
+
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
@@ -34,11 +36,13 @@ include_directories(submodule/polympc/src src)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
+  roslib
   std_msgs
   message_generation
   geometry_msgs
 	genmsg
 	visualization_msgs
+	#polympc-ros
 )
 
 ## System dependencies are found with CMake's conventions
@@ -137,7 +141,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES tvc_simulator
-  CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs
+  CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs #polympc-ros
 #  DEPENDS system_lib
 )
 
@@ -148,9 +152,8 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+  include
   ${catkin_INCLUDE_DIRS}
-  -DCMAKE_TOOLCHAIN_FILE=/home/alberic/vcpkg/scripts/buildsystems/vcpkg.cmake
 )
 
 ## Declare a C++ library
@@ -243,7 +246,8 @@ add_executable(time_keeper src/time_keeper.cpp)
 target_link_libraries(time_keeper ${catkin_LIBRARIES})
 
 add_executable(control src/control.cpp)
-target_link_libraries(control ${catkin_LIBRARIES})
+target_link_libraries(control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
+add_dependencies(control ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(guidance src/guidance.cpp)
 target_link_libraries(guidance ${catkin_LIBRARIES})
