@@ -153,33 +153,17 @@ class control_ocp : public ContinuousOCP<control_ocp, Approximation, SPARSE>
 {
 public:
     ~control_ocp() = default;
-    control_ocp()
-    {
-        Q.setZero();
-        R.setZero();
-        Q.diagonal() << 1.0, 1.0, 5e4,    0.2, 0.2, 5e4,   500, 500, 500, 500,  100, 100, 100,    0;
-        R.diagonal() << 5e2, 5e2, 0, 5e2;
-        P.setIdentity();
-        P.diagonal() << 1.0, 1.0, 5e4,   0.2, 0.2, 5e4,    500, 500, 500, 500,   100, 100, 100,    0;
-
-        xs << target_point.position.x/1000, target_point.position.y/1000, target_point.position.z/1000,
-                    target_point.speed.x/1000, target_point.speed.y/1000, target_point.speed.z/1000,
-                    0, 0, 0, 1,
-                    0, 0, 0,
-                    target_point.propeller_mass;
-
-        us << 0.0, 0.0, 0, 0.0;
-    }
 
     static constexpr double t_start = 0.0;
     static constexpr double t_stop  = CONTROL_HORIZON;
 
-    Eigen::Matrix<scalar_t, 14,14> Q;
-    Eigen::Matrix<scalar_t, 4,4> R;
-    Eigen::Matrix<scalar_t, 14,14> P;
+    Eigen::DiagonalMatrix<scalar_t, 14> Q{1.0, 1.0, 5e4,    0.2, 0.2, 5e4,   500, 500, 500, 500,  100, 100, 100,    0};
+    Eigen::DiagonalMatrix<scalar_t, 4> R{5e2, 5e2, 0, 5e2};
+    Eigen::DiagonalMatrix<scalar_t, 14> QN{1.0, 1.0, 5e4,   0.2, 0.2, 5e4,    500, 500, 500, 500,   100, 100, 100,    0};
 
-    Eigen::Matrix<scalar_t, 14,1> xs;
-    Eigen::Matrix<scalar_t, 4,1> us;
+
+    Eigen::Matrix<scalar_t, 14,1> xs{0.0, 0.0, 0.0,   0.0, 0.0, 0.0,   0.0, 0.0, 0.0,1.0,    0.0, 0.0, 0.0,   6.0};
+    Eigen::Matrix<scalar_t, 4,1> us{0.0, 0.0, 0, 0.0};
 
     template<typename T>
     inline void dynamics_impl(const Eigen::Ref<const state_t<T>> x, const Eigen::Ref<const control_t<T>> u,
@@ -245,9 +229,16 @@ public:
     inline void lagrange_term_impl(const Eigen::Ref<const state_t<T>> x, const Eigen::Ref<const control_t<T>> u,
                                    const Eigen::Ref<const parameter_t<T>> p, const Eigen::Ref<const static_parameter_t> d,
                                    const scalar_t &t, T &lagrange) noexcept
-    {
-        lagrange = (x - xs.template cast<T>()).dot(Q.template cast<T>() * (x - xs.template cast<T>())) +
-                   (u - us.template cast<T>()).dot(R.template cast<T>() * (u - us.template cast<T>()));
+    {                 
+        Eigen::Matrix<T,14,14> Qm = Q.toDenseMatrix().template cast<T>();
+        Eigen::Matrix<T,4,4> Rm = R.toDenseMatrix().template cast<T>();
+        
+        Eigen::Matrix<T,14,1> x_error = x - xs.template cast<T>();
+        Eigen::Matrix<T,4,1> u_error = u - us.template cast<T>();
+        
+
+        lagrange = x_error.dot(Qm * x_error) + u_error.dot(Rm * u_error);
+
     }
 
     template<typename T>
@@ -255,7 +246,11 @@ public:
                                 const Eigen::Ref<const parameter_t<T>> p, const Eigen::Ref<const static_parameter_t> d,
                                 const scalar_t &t, T &mayer) noexcept
     {
-        mayer = (x - xs.template cast<T>()).dot(P.template cast<T>() * (x - xs.template cast<T>()));
+        Eigen::Matrix<T,14,14> Qm = QN.toDenseMatrix().template cast<T>();
+        
+        Eigen::Matrix<T,14,1> x_error = x - xs.template cast<T>();
+                
+        mayer = x_error.dot(Qm * x_error);
     }
 };
 
@@ -271,6 +266,10 @@ public:
     using typename Base::scalar_t;
     using typename Base::nlp_variable_t;
     using typename Base::nlp_hessian_t;
+
+  EIGEN_STRONG_INLINE Problem& get_problem() noexcept { return this->problem; }
+
+
 
     /** change step size selection algorithm */
     scalar_t step_size_selection_impl(const Ref<const nlp_variable_t>& p) noexcept
@@ -398,13 +397,13 @@ int main(int argc, char **argv)
   
 	// Init MPC ----------------------------------------------------------------------------------------------------------------------
 	// Creates solver
-	using mpc_t = MPC<control_ocp, MySolver, admm>;
+	using mpc_t = MPC<control_ocp, MySolver, osqp_solver_t>;
 	mpc_t mpc;
-  mpc.settings().max_iter = 10;
+	
+  mpc.settings().max_iter = 1;
   mpc.settings().line_search_max_iter = 10;
   //mpc.m_solver.settings().max_iter = 1000;
-  //mpc.m_qp_solver.settings().scaling = 10;
-  //mpc.settings().max_iter = 100;
+  //mpc.m_solver.settings().scaling = 10;
 
 
   // Input constraints
@@ -442,6 +441,7 @@ int main(int argc, char **argv)
   ros::Timer control_thread = n.createTimer(ros::Duration(0.1),
   [&](const ros::TimerEvent&) 
 	{
+  
     // Get current FSM and time
     if(client_fsm.call(srv_fsm))
     {
@@ -451,7 +451,7 @@ int main(int argc, char **argv)
     srv_waypoint.request.target_time = current_fsm.time_now + CONTROL_HORIZON;
     if(client_waypoint.call(srv_waypoint))
     {
-      target_point = srv_waypoint.response.target_point;
+        target_point = srv_waypoint.response.target_point;
         mpc.ocp().xs <<  target_point.position.x/1000, target_point.position.y/1000, target_point.position.z/1000,
                             target_point.speed.x/1000, target_point.speed.y/1000, target_point.speed.z/1000,
                             0, 0, 0, 1, 
@@ -469,8 +469,8 @@ int main(int argc, char **argv)
 		else if (current_fsm.state_machine.compare("Launch") == 0)
 		{
       x0 = init_cond;
-      mpc.initial_conditions(x0, x0);
-      //mpc.m_solver.m_lam.setZero();
+      mpc.initial_conditions(x0);
+
 		  // Solve problem and save solution
 			double time_now = ros::Time::now().toSec();
 		  mpc.solve();
@@ -483,7 +483,7 @@ int main(int argc, char **argv)
 			Eigen::Matrix<double, 4, 1> control_MPC;
 			control_MPC =  mpc.solution_u_at(0.0).transpose();
 			//Eigen::Matrix<double, 4,1> input; input << 100*control_MPC(0), 100*control_MPC(1), 1000*(control_MPC(2)+1), 50*control_MPC(3);
-			std::cout << mpc.solution_x_reshaped() << "\n";
+			//std::cout << mpc.solution_x_reshaped() << "\n";
 			
 			Eigen::Matrix<double, 4,1> input = convertControl_SI(control_MPC);
 			ROS_INFO("Fx: %f, Fy: %f, Fz: %f, Mx: %f \n",  input[0], input[1], input[2], input[3]);
