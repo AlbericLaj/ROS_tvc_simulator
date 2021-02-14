@@ -208,10 +208,12 @@ class Simulator3D:
         # Drag force
         d = -0.5 * rho * Sm * cd * v_mag ** 2 * v_norm
         
+        
 
         # Total forces
         f_tot = T + G + n + d
-
+        print(f_tot)
+        
         # Moment estimation
 
         # Aerodynamic corrective moment

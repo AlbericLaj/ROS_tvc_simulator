@@ -14,7 +14,7 @@
 #include <sstream>
 #include <string>
 
-#define CONTROL_HORIZON 2 // In seconds
+#define CONTROL_HORIZON 4 // In seconds
 
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
@@ -167,7 +167,7 @@ public:
                     0, 0, 0,
                     target_point.propeller_mass;
 
-        us << 0.0, 0.0, 1, 0.0;
+        us << 0.0, 0.0, 0, 0.0;
     }
 
     static constexpr double t_start = 0.0;
@@ -185,7 +185,7 @@ public:
                               const Eigen::Ref<const parameter_t<T>> p, const Eigen::Ref<const static_parameter_t> &d,
                               const T &t, Eigen::Ref<state_t<T>> xdot) const noexcept
     {
-        Eigen::Matrix<T, 4,1> input; input << 50*u(0), 50*u(1),100*(u(2)+1) , 50*u(3);
+        Eigen::Matrix<T, 4,1> input; input << 50*u(0), 50*u(1),1000*(u(2)+1) , 50*u(3);
         
         // -------------- Constant Rocket parameters ----------------------------------------
         Eigen::Matrix<T, 3, 1> J_inv; J_inv << (T)(1.97/47), (T)(1.97/47), (T)(1.0/2);
@@ -196,7 +196,6 @@ public:
         T g0 = (T)9.81;                             // Earth gravity in [m/s^2]
 
 
-
         // -------------- Simulation variables -----------------------------
         T mass = (T)40 + x(13);                  // Instantaneous mass of the rocket in [kg]
 
@@ -205,7 +204,7 @@ public:
         Eigen::Matrix<T, 3, 3> rot_matrix = attitude.toRotationMatrix();
 
         // Z drag --> Big approximation: speed in Z is basically the same between world and rocket
-        T drag = (T)(1e6*0.5*0.7*0.0176*1.225*x(5)*x(5)); 
+        T drag = (T)(1e6*0.5*0.3*0.0186*1.225*x(5)*x(5)); 
         
         // Force in body frame (drag + thrust) in [N]
         Eigen::Matrix<T, 3, 1> rocket_force; rocket_force << (T)input(0), (T)input(1), (T)(input(2) - drag);
@@ -215,6 +214,7 @@ public:
 
         // Total force in inertial frame [N]
         Eigen::Matrix<T, 3, 1> total_force;  total_force = rot_matrix*rocket_force - gravity;
+        std::cout << "force " << total_force.transpose() << "\n";
 
 
         // Angular velocity omega in quaternion format to compute quaternion derivative
