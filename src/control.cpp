@@ -14,7 +14,7 @@
 #include <sstream>
 #include <string>
 
-#define CONTROL_HORIZON 4 // In seconds
+#define CONTROL_HORIZON 3 // In seconds
 
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
@@ -464,7 +464,7 @@ int main(int argc, char **argv)
 		else if (current_fsm.state_machine.compare("Launch") == 0)
 		{
       // Reset solver
-      solver.m_lam.setZero();
+      //solver.m_lam.setZero();
       
       solver.primal_solution().head<154>() = init_cond.replicate(11, 1);
 		  solver.upper_bound_x().segment(140, 14) = init_cond;

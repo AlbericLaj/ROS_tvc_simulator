@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/alberic/catkin_ws/src/tvc_simulator/cmake-build-debug/devel/setup.sh

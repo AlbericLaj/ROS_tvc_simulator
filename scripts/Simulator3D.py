@@ -212,7 +212,6 @@ class Simulator3D:
 
         # Total forces
         f_tot = T + G + n + d
-        print(f_tot)
         
         # Moment estimation
 
