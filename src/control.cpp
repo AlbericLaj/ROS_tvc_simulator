@@ -14,7 +14,7 @@
 #include <sstream>
 #include <string>
 
-#define CONTROL_HORIZON 4 // In seconds
+#define CONTROL_HORIZON 2 // In seconds
 
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
@@ -26,6 +26,7 @@
 #include "solvers/osqp_interface.hpp"
 
 #include "utils/helpers.hpp"
+#include "control/mpc_wrapper.hpp"
 
 #include <iomanip>
 #include <iostream>
@@ -214,8 +215,6 @@ public:
 
         // Total force in inertial frame [N]
         Eigen::Matrix<T, 3, 1> total_force;  total_force = rot_matrix*rocket_force - gravity;
-        std::cout << "force " << total_force.transpose() << "\n";
-
 
         // Angular velocity omega in quaternion format to compute quaternion derivative
         Eigen::Quaternion<T> omega_quat((T)0.0, x(10), x(11), x(12));
@@ -399,38 +398,43 @@ int main(int argc, char **argv)
   
 	// Init MPC ----------------------------------------------------------------------------------------------------------------------
 	// Creates solver
-	MySolver<control_ocp, osqp_solver_t> solver;
-  solver.settings().max_iter = 1;
-  solver.settings().line_search_max_iter = 10;
-  solver.m_qp_solver.settings().max_iter = 1000;
-  solver.m_qp_solver.settings().scaling = 10;
+	using mpc_t = MPC<control_ocp, MySolver, admm>;
+	mpc_t mpc;
+  mpc.settings().max_iter = 10;
+  mpc.settings().line_search_max_iter = 10;
+  //mpc.m_solver.settings().max_iter = 1000;
+  //mpc.m_qp_solver.settings().scaling = 10;
+  //mpc.settings().max_iter = 100;
 
 
   // Input constraints
   const double inf = std::numeric_limits<double>::infinity();
-  Eigen::Matrix<double, 4, 1> lbu, ubu;
-  double side_thrust = 40;
-  lbu << -1, -1, -1, -1;
-  ubu << 1, 1, 1, 1;
-
-  solver.upper_bound_x().tail(44) = ubu.replicate(11,1);
-  solver.lower_bound_x().tail(44) = lbu.replicate(11,1);
+  mpc_t::control_t lbu; 
+  mpc_t::control_t ubu; 
+  
+  lbu << -1, -1, -1, -1; // lower bound on control
+  ubu << 1, 1, 1, 1; // upper bound on control
+  
+  lbu << -inf, -inf, -inf, -inf;
+  ubu <<  inf,  inf,  inf,  inf;
+  mpc.control_bounds(lbu, ubu);
 
 
   // State constraints
   const double eps = 1e-1;
-  Eigen::Matrix<double, 14, 1> lbx, ubx;
+  mpc_t::state_t lbx; 
+  mpc_t::state_t ubx; 
+  
   //lbx << -inf, -inf, 0,   -inf, -inf, 0-eps,   -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf,  0-eps;
   //ubx << inf,   inf, inf,  inf,  inf, 330+eps,  0.183+eps,  0.183+eps,  0.183+eps,  1+eps,    inf,  inf,  inf,  3.1+eps;
   
-  lbx << -inf, -inf, -inf,   -inf, -inf, -inf,   -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf,     0-eps;
-  ubx << inf,  inf, inf,     inf,  inf, inf,    0.183+eps,  0.183+eps,  0.183+eps,  1+eps,     inf,  inf,  inf,      inf;
+  lbx << -inf, -inf, -inf,   -inf, -inf, -inf,   -inf, -inf, -inf, -inf,   -inf, -inf, -inf,     -inf;
+  ubx << inf,  inf, inf,     inf,  inf, inf,    inf,  inf,  inf,  inf,     inf,  inf,  inf,      inf;
+  mpc.state_bounds(lbx, ubx);
+  
 
-  solver.upper_bound_x().head(154) = ubx.replicate(11,1);
-  solver.lower_bound_x().head(154) = lbx.replicate(11,1);
-
-  // Init solution
-  solver.primal_solution().head<154>() = init_cond.replicate(11, 1);
+  // Initial state
+  mpc_t::state_t x0;
 		  
   // --------------------------------------------------------------------------------------------------------------------
 
@@ -448,11 +452,12 @@ int main(int argc, char **argv)
     if(client_waypoint.call(srv_waypoint))
     {
       target_point = srv_waypoint.response.target_point;
-      solver.problem.xs <<  target_point.position.x/1000, target_point.position.y/1000, target_point.position.z/1000,
+        mpc.ocp().xs <<  target_point.position.x/1000, target_point.position.y/1000, target_point.position.z/1000,
                             target_point.speed.x/1000, target_point.speed.y/1000, target_point.speed.z/1000,
                             0, 0, 0, 1, 
                             0, 0, 0,
                             target_point.propeller_mass;
+
     }
 
     // State machine ------------------------------------------
@@ -463,32 +468,25 @@ int main(int argc, char **argv)
 
 		else if (current_fsm.state_machine.compare("Launch") == 0)
 		{
-      // Reset solver
-      solver.m_lam.setZero();
-      
-      solver.primal_solution().head<154>() = init_cond.replicate(11, 1);
-		  solver.upper_bound_x().segment(140, 14) = init_cond;
-		  solver.lower_bound_x().segment(140, 14) = init_cond;
-
+      x0 = init_cond;
+      mpc.initial_conditions(x0, x0);
+      //mpc.m_solver.m_lam.setZero();
 		  // Solve problem and save solution
 			double time_now = ros::Time::now().toSec();
-		  solver.solve();
-			ROS_INFO("T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), solver.info().status.value, solver.m_qp_solver.m_info.iter);
+		  mpc.solve();
+			ROS_INFO("T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
 
 		 
 
 		  // Get state and control solution
-		  Eigen::Matrix<double, 14, 11> trajectory; trajectory << Eigen::Map<Eigen::Matrix<double, 14, 11>>(solver.primal_solution().head(154).data(), 14, 11);
-		  Eigen::Matrix<double, 4, 11> control_MPC_full; control_MPC_full << Eigen::Map<Eigen::Matrix<double, 4, 11>>(solver.primal_solution().tail(44).data(), 4, 11);
-
-			//std::cout << control_MPC_full << "\n";
 
 			Eigen::Matrix<double, 4, 1> control_MPC;
-			control_MPC =  control_MPC_full.col( control_MPC_full.cols()-1 );
-			//ROS_INFO("Fx: %f, Fy: %f, Fz: %f, Mx: %f \n",  control_MPC[0], control_MPC[1], control_MPC[2], control_MPC[3]);
+			control_MPC =  mpc.solution_u_at(0.0).transpose();
 			//Eigen::Matrix<double, 4,1> input; input << 100*control_MPC(0), 100*control_MPC(1), 1000*(control_MPC(2)+1), 50*control_MPC(3);
+			std::cout << mpc.solution_x_reshaped() << "\n";
 			
 			Eigen::Matrix<double, 4,1> input = convertControl_SI(control_MPC);
+			ROS_INFO("Fx: %f, Fy: %f, Fz: %f, Mx: %f \n",  input[0], input[1], input[2], input[3]);
 
 			// -------------------------------------------------------------------------------------------------------------------------
 
