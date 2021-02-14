@@ -1,0 +1,3 @@
+[submodule "submodule"]
+	path = submodule/polympc
+	url = https://gitlab.epfl.ch/listov/polympc.git
