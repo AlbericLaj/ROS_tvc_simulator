@@ -1,0 +1,8 @@
+prefix=/home/alberic/catkin_ws/src/tvc_simulator/cmake-build-debug/devel
+
+Name: tvc_simulator
+Description: Description of tvc_simulator
+Version: 0.0.0
+Cflags: -I/home/alberic/catkin_ws/src/tvc_simulator/cmake-build-debug/devel/include
+Libs: -L${prefix}/lib 
+Requires: roscpp rospy std_msgs message_runtime geometry_msgs
