@@ -1,8 +1,0 @@
-prefix=/usr/local
-
-Name: tvc_simulator
-Description: Description of tvc_simulator
-Version: 0.0.0
-Cflags: -I${prefix}/include
-Libs: -L${prefix}/lib 
-Requires: roscpp rospy std_msgs message_runtime geometry_msgs
