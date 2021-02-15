@@ -14,7 +14,6 @@
 
 
   <node name="control" pkg="tvc_simulator" type="control" output ="screen"/>
-  <node name="guidance" pkg="tvc_simulator" type="guidance" output ="screen"  />
   <node name="integrator" pkg="tvc_simulator" type="integrator.py" cwd = "node" output ="screen"/>
   <node name="disturbance" pkg="tvc_simulator" type="disturbance.py" cwd = "node"/>
   <node name="data_fusion" pkg="tvc_simulator" type="data_fusion" cwd = "node"/>
