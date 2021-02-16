@@ -2,13 +2,11 @@
 
 #include "tvc_simulator/FSM.h"
 #include "tvc_simulator/State.h"
-#include "tvc_simulator/Waypoint.h"
 
 #include "tvc_simulator/Control.h"
 #include "geometry_msgs/Vector3.h"
 
 #include "tvc_simulator/GetFSM.h"
-#include "tvc_simulator/GetWaypoint.h"
 
 #include <time.h>
 #include <sstream>
@@ -82,9 +80,6 @@ class Rocket
 
 Rocket rocket;
 
-// Global variable with next waypoint to be followed
-tvc_simulator::Waypoint target_point;
-
 // Global variable with last received rocket state
 tvc_simulator::State current_state;
 Eigen::Matrix<double, 14, 1> init_cond; // Used for MPC init
@@ -110,7 +105,7 @@ void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
 
 Eigen::Matrix<double, 4,1> convertControl_SI(const Eigen::Matrix<double, 4,1>& u)
 {
-  Eigen::Matrix<double, 4,1> input; input << 50*u(0), 50*u(1), 1000*(u(2)+1), 50*u(3);
+  Eigen::Matrix<double, 4,1> input; input << 5*u(0), 5*u(1), 15*(u(2)+1), 5*u(3);
 
   return input;
 }
@@ -156,16 +151,16 @@ public:
     {
         Q.setZero();
         R.setZero();
-        Q.diagonal() << 1.0, 1.0, 5e4,    0.2, 0.2, 5e4,   500, 500, 500, 500,  100, 100, 100,    0;
+        Q.diagonal() << 1.0, 1.0, 5e4,    0.2, 0.2, 0,   500, 500, 500, 500,  100, 100, 100,    0;
         R.diagonal() << 5e2, 5e2, 0, 5e2;
         P.setIdentity();
-        P.diagonal() << 1.0, 1.0, 5e4,   0.2, 0.2, 5e4,    500, 500, 500, 500,   100, 100, 100,    0;
+        P.diagonal() << 1.0, 1.0, 5e4,   0.2, 0.2, 0,    500, 500, 500, 500,   100, 100, 100,    0;
 
-        xs << target_point.position.x/1000, target_point.position.y/1000, target_point.position.z/1000,
-                    target_point.speed.x/1000, target_point.speed.y/1000, target_point.speed.z/1000,
-                    0, 0, 0, 1,
-                    0, 0, 0,
-                    target_point.propeller_mass;
+        xs << 0, 0, 50/1000,
+              0, 0, 0,
+              0, 0, 0, 1,
+              0, 0, 0,
+              6;
 
         us << 0.0, 0.0, 0, 0.0;
     }
@@ -185,19 +180,19 @@ public:
                               const Eigen::Ref<const parameter_t<T>> p, const Eigen::Ref<const static_parameter_t> &d,
                               const T &t, Eigen::Ref<state_t<T>> xdot) const noexcept
     {
-        Eigen::Matrix<T, 4,1> input; input << 50*u(0), 50*u(1),1000*(u(2)+1) , 50*u(3);
+        Eigen::Matrix<T, 4,1> input; input << 5*u(0), 5*u(1),15*(u(2)+1) , 5*u(3);
         
         // -------------- Constant Rocket parameters ----------------------------------------
-        Eigen::Matrix<T, 3, 1> J_inv; J_inv << (T)(1.97/47), (T)(1.97/47), (T)(1.0/2);
+        Eigen::Matrix<T, 3, 1> J_inv; J_inv << (T)(0.4/0.125), (T)(0.4/0.125), (T)(1.0/0.02);
         
-        T Isp = (T)213;                             // Specific Impulse in [s] 
+        T Isp = (T)rocket.Isp;                             // Specific Impulse in [s]
 
         // -------------- Constant external parameters ------------------------------------
         T g0 = (T)9.81;                             // Earth gravity in [m/s^2]
 
 
         // -------------- Simulation variables -----------------------------
-        T mass = (T)40 + x(13);                  // Instantaneous mass of the rocket in [kg]
+        T mass = (T)rocket.dry_mass + x(13);                  // Instantaneous mass of the rocket in [kg]
 
         // Orientation of the rocket with quaternion
         Eigen::Quaternion<T> attitude( x(9), x(6), x(7), x(8));
@@ -214,7 +209,7 @@ public:
 
         // Total force in inertial frame [N]
         Eigen::Matrix<T, 3, 1> total_force;  total_force = rot_matrix*rocket_force - gravity;
-        std::cout << "force " << total_force.transpose() << "\n";
+        //std::cout << "force " << total_force.transpose() << "\n";
 
 
         // Angular velocity omega in quaternion format to compute quaternion derivative
@@ -380,10 +375,6 @@ int main(int argc, char **argv)
 	// Setup Time_keeper client and srv variable for FSM and time synchronization
 	ros::ServiceClient client_fsm = n.serviceClient<tvc_simulator::GetFSM>("getFSM");
   tvc_simulator::GetFSM srv_fsm;
-
-  // Setup Waypoint client and srv variable for trajectory following
-  ros::ServiceClient client_waypoint = n.serviceClient<tvc_simulator::GetWaypoint>("getWaypoint");
-  tvc_simulator::GetWaypoint srv_waypoint;
 	
   // Initialize control
 	tvc_simulator::Control control_law;
@@ -402,7 +393,7 @@ int main(int argc, char **argv)
 	MySolver<control_ocp, osqp_solver_t> solver;
   solver.settings().max_iter = 1;
   solver.settings().line_search_max_iter = 10;
-  solver.m_qp_solver.settings().max_iter = 1000;
+  solver.m_qp_solver.settings().max_iter = 200;
   solver.m_qp_solver.settings().scaling = 10;
 
 
@@ -412,6 +403,9 @@ int main(int argc, char **argv)
   double side_thrust = 40;
   lbu << -1, -1, -1, -1;
   ubu << 1, 1, 1, 1;
+  
+  //lbu << -inf, -inf, -inf, -inf;
+  //ubu << inf, inf, inf, inf;
 
   solver.upper_bound_x().tail(44) = ubu.replicate(11,1);
   solver.lower_bound_x().tail(44) = lbu.replicate(11,1);
@@ -423,8 +417,8 @@ int main(int argc, char **argv)
   //lbx << -inf, -inf, 0,   -inf, -inf, 0-eps,   -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf,  0-eps;
   //ubx << inf,   inf, inf,  inf,  inf, 330+eps,  0.183+eps,  0.183+eps,  0.183+eps,  1+eps,    inf,  inf,  inf,  3.1+eps;
   
-  lbx << -inf, -inf, -inf,   -inf, -inf, -inf,   -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf,     0-eps;
-  ubx << inf,  inf, inf,     inf,  inf, inf,    0.183+eps,  0.183+eps,  0.183+eps,  1+eps,     inf,  inf,  inf,      inf;
+  lbx << -inf, -inf, -inf,   -inf, -inf, -inf,   -inf, -inf, -inf, -inf,   -inf, -inf, -inf,     -inf;
+  ubx << inf,  inf, inf,     inf,  inf, inf,    inf,  inf,  inf,  inf,     inf,  inf,  inf,      inf;
 
   solver.upper_bound_x().head(154) = ubx.replicate(11,1);
   solver.lower_bound_x().head(154) = lbx.replicate(11,1);
@@ -443,17 +437,6 @@ int main(int argc, char **argv)
     {
       current_fsm = srv_fsm.response.fsm;
     }
-    // Get next waypoint objective
-    srv_waypoint.request.target_time = current_fsm.time_now + CONTROL_HORIZON;
-    if(client_waypoint.call(srv_waypoint))
-    {
-      target_point = srv_waypoint.response.target_point;
-      solver.problem.xs <<  target_point.position.x/1000, target_point.position.y/1000, target_point.position.z/1000,
-                            target_point.speed.x/1000, target_point.speed.y/1000, target_point.speed.z/1000,
-                            0, 0, 0, 1, 
-                            0, 0, 0,
-                            target_point.propeller_mass;
-    }
 
     // State machine ------------------------------------------
 		if (current_fsm.state_machine.compare("Idle") == 0)
@@ -462,10 +445,7 @@ int main(int argc, char **argv)
 		}
 
 		else if (current_fsm.state_machine.compare("Launch") == 0)
-		{
-      // Reset solver
-      //solver.m_lam.setZero();
-      
+		{ 
       solver.primal_solution().head<154>() = init_cond.replicate(11, 1);
 		  solver.upper_bound_x().segment(140, 14) = init_cond;
 		  solver.lower_bound_x().segment(140, 14) = init_cond;
@@ -494,14 +474,14 @@ int main(int argc, char **argv)
 
 
       // Simple P controller. Thrust in z is used to reach apogee, Thrust in x and y is used to keep vertical orientation
-			thrust_force.z = (target_point.position.z - current_state.pose.position.z)*100;
+			thrust_force.z = (1000 - current_state.pose.position.z)*100;
 
-      thrust_force.x = -current_state.pose.orientation.x*900/rocket.dry_CM;
-      thrust_force.y = -current_state.pose.orientation.y*900/rocket.dry_CM;
+      thrust_force.x = -current_state.pose.orientation.x*90/rocket.dry_CM;
+      thrust_force.y = -current_state.pose.orientation.y*90/rocket.dry_CM;
 
-			thrust_force.x = input[0];
-			thrust_force.y = input[1];
-			thrust_force.z = input[2];
+			//thrust_force.x = input[0];
+			//thrust_force.y = input[1];
+			//thrust_force.z = input[2];
 
 
       if(thrust_force.z > rocket.maxThrust) thrust_force.z = rocket.maxThrust;
@@ -513,8 +493,8 @@ int main(int argc, char **argv)
       if(thrust_force.y < -100) thrust_force.y = -100;
 
       // Torque in X and Y is defined by thrust in X and Y. Torque in Z is free variable
-      thrust_torque.x = thrust_force.x*1.97; 
-      thrust_torque.y = thrust_force.y*1.97;
+      thrust_torque.x = thrust_force.x*0.4; 
+      thrust_torque.y = thrust_force.y*0.4;
 			thrust_torque.z = input[3];
 
 			control_law.force = thrust_force;
