@@ -12,7 +12,7 @@
 #include <sstream>
 #include <string>
 
-#define CONTROL_HORIZON 3 // In seconds
+#define CONTROL_HORIZON 5 // In seconds
 
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
@@ -82,7 +82,7 @@ Rocket rocket;
 
 // Global variable with last received rocket state
 tvc_simulator::State current_state;
-Eigen::Matrix<double, 14, 1> init_cond; // Used for MPC init
+Eigen::Matrix<double, 9, 1> init_cond; // Used for MPC init
 
 // Global variable with last requested fsm
 tvc_simulator::FSM current_fsm;
@@ -94,11 +94,10 @@ void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
   current_state.twist = rocket_state->twist;
   current_state.propeller_mass = rocket_state->propeller_mass;
 
-	init_cond << rocket_state->pose.position.x/1000, rocket_state->pose.position.y/1000, rocket_state->pose.position.z/1000,
-								rocket_state->twist.linear.x/1000, rocket_state->twist.linear.y/1000, rocket_state->twist.linear.z/1000,
+	init_cond <<  rocket_state->pose.position.z/1000,
+								rocket_state->twist.linear.z/1000,
 								rocket_state->pose.orientation.x, rocket_state->pose.orientation.y, rocket_state->pose.orientation.z, rocket_state->pose.orientation.w, 
-								rocket_state->twist.angular.x, rocket_state->twist.angular.y, rocket_state->twist.angular.z,
-								rocket_state->propeller_mass;
+								rocket_state->twist.angular.x, rocket_state->twist.angular.y, rocket_state->twist.angular.z;
 						
 }
 
@@ -140,7 +139,7 @@ time_point get_time()
 using Polynomial = polympc::Chebyshev<POLY_ORDER, polympc::GAUSS_LOBATTO, double>;
 using Approximation = polympc::Spline<Polynomial, NUM_SEG>;
 
-POLYMPC_FORWARD_DECLARATION(/*Name*/ control_ocp, /*NX*/ 14, /*NU*/ 4, /*NP*/ 0, /*ND*/ 0, /*NG*/0, /*TYPE*/ double)
+POLYMPC_FORWARD_DECLARATION(/*Name*/ control_ocp, /*NX*/ 9, /*NU*/ 4, /*NP*/ 0, /*ND*/ 0, /*NG*/0, /*TYPE*/ double)
 
 
 class control_ocp : public ContinuousOCP<control_ocp, Approximation, SPARSE>
@@ -151,28 +150,27 @@ public:
     {
         Q.setZero();
         R.setZero();
-        Q.diagonal() << 1.0, 1.0, 5e4,    0.2, 0.2, 0,   500, 500, 500, 500,  100, 100, 100,    0;
-        R.diagonal() << 5e2, 5e2, 0, 5e2;
+        Q.diagonal() << 50,  0,    100, 100, 100, 100,     10, 10, 10;
+        R.diagonal() << 5, 5, 0, 5;
         P.setIdentity();
-        P.diagonal() << 1.0, 1.0, 5e4,   0.2, 0.2, 0,    500, 500, 500, 500,   100, 100, 100,    0;
+        P.diagonal() << 50,  0,    100, 100, 100, 100,     10, 10, 10;
 
-        xs << 0, 0, 50/1000,
-              0, 0, 0,
+        xs << 5/1000,
+              0,
               0, 0, 0, 1,
-              0, 0, 0,
-              6;
+              0, 0, 0;
 
-        us << 0.0, 0.0, 0, 0.0;
+        us << 0.0, 0.0, 1.0, 0.0;
     }
 
     static constexpr double t_start = 0.0;
     static constexpr double t_stop  = CONTROL_HORIZON;
 
-    Eigen::Matrix<scalar_t, 14,14> Q;
+    Eigen::Matrix<scalar_t, 9,9> Q;
     Eigen::Matrix<scalar_t, 4,4> R;
-    Eigen::Matrix<scalar_t, 14,14> P;
+    Eigen::Matrix<scalar_t, 9,9> P;
 
-    Eigen::Matrix<scalar_t, 14,1> xs;
+    Eigen::Matrix<scalar_t, 9,1> xs;
     Eigen::Matrix<scalar_t, 4,1> us;
 
     template<typename T>
@@ -180,29 +178,28 @@ public:
                               const Eigen::Ref<const parameter_t<T>> p, const Eigen::Ref<const static_parameter_t> &d,
                               const T &t, Eigen::Ref<state_t<T>> xdot) const noexcept
     {
+        //std::cout << x.transpose() << "\n" << u.transpose() << "\n\n";
         Eigen::Matrix<T, 4,1> input; input << 5*u(0), 5*u(1),15*(u(2)+1) , 5*u(3);
         
         // -------------- Constant Rocket parameters ----------------------------------------
         Eigen::Matrix<T, 3, 1> J_inv; J_inv << (T)(0.4/0.125), (T)(0.4/0.125), (T)(1.0/0.02);
-        
-        T Isp = (T)rocket.Isp;                             // Specific Impulse in [s]
 
         // -------------- Constant external parameters ------------------------------------
         T g0 = (T)9.81;                             // Earth gravity in [m/s^2]
 
 
         // -------------- Simulation variables -----------------------------
-        T mass = (T)rocket.dry_mass + x(13);                  // Instantaneous mass of the rocket in [kg]
+        T mass = (T)2;                  // Instantaneous mass of the rocket in [kg]
 
         // Orientation of the rocket with quaternion
-        Eigen::Quaternion<T> attitude( x(9), x(6), x(7), x(8));
+        Eigen::Quaternion<T> attitude( x(5), x(2), x(3), x(4));
         Eigen::Matrix<T, 3, 3> rot_matrix = attitude.toRotationMatrix();
 
         // Z drag --> Big approximation: speed in Z is basically the same between world and rocket
-        T drag = (T)(1e6*0.5*0.3*0.0186*1.225*x(5)*x(5)); 
+        //T drag = (T)(1e6*0.5*0.3*0.0186*1.225*x(1)*x(1)); 
         
         // Force in body frame (drag + thrust) in [N]
-        Eigen::Matrix<T, 3, 1> rocket_force; rocket_force << (T)input(0), (T)input(1), (T)(input(2) - drag);
+        Eigen::Matrix<T, 3, 1> rocket_force; rocket_force << (T)input(0), (T)input(1), (T)input(2);
 
         // Force in inertial frame: gravity
         Eigen::Matrix<T, 3, 1> gravity; gravity << (T)0, (T)0, g0*mass;
@@ -213,7 +210,7 @@ public:
 
 
         // Angular velocity omega in quaternion format to compute quaternion derivative
-        Eigen::Quaternion<T> omega_quat((T)0.0, x(10), x(11), x(12));
+        Eigen::Quaternion<T> omega_quat((T)0.0, x(6), x(7), x(8));
         
         // X, Y force and Z torque in body frame   
         Eigen::Matrix<T, 3, 1> rocket_torque; rocket_torque << input(0), input(1), input(3);
@@ -222,19 +219,16 @@ public:
         // -------------- Differential equation ---------------------
 
         // Position variation is speed
-        xdot.head(3) = x.segment(3,3);
+        xdot(0) = x(1);
 
         // Speed variation is Force/mass
-        xdot.segment(3,3) = (T)1e-3*total_force/mass;  
+        xdot(1) = (T)1e-3*total_force(2)/mass;  
 
         // Quaternion variation is 0.5*w◦q
-        xdot.segment(6, 4) =  (T)0.5*(omega_quat*attitude).coeffs();
+        xdot.segment(2, 4) =  (T)0.5*(omega_quat*attitude).coeffs();
 
         // Angular speed variation is Torque/Inertia
-        xdot.segment(10, 3) = rot_matrix*(rocket_torque.cwiseProduct(J_inv));
-
-        // Mass variation is proportional to thrust
-        xdot(13) = -input(2)/(Isp*g0);
+        xdot.segment(6, 3) = rot_matrix*(rocket_torque.cwiseProduct(J_inv));
     }
 
     template<typename T>
@@ -391,7 +385,7 @@ int main(int argc, char **argv)
 	// Init MPC ----------------------------------------------------------------------------------------------------------------------
 	// Creates solver
 	MySolver<control_ocp, osqp_solver_t> solver;
-  solver.settings().max_iter = 1;
+  solver.settings().max_iter = 2;
   solver.settings().line_search_max_iter = 10;
   solver.m_qp_solver.settings().max_iter = 200;
   solver.m_qp_solver.settings().scaling = 10;
@@ -400,9 +394,8 @@ int main(int argc, char **argv)
   // Input constraints
   const double inf = std::numeric_limits<double>::infinity();
   Eigen::Matrix<double, 4, 1> lbu, ubu;
-  double side_thrust = 40;
   lbu << -1, -1, -1, -1;
-  ubu << 1, 1, 1, 1;
+  ubu <<  1,  1,  1 , 1;
   
   //lbu << -inf, -inf, -inf, -inf;
   //ubu << inf, inf, inf, inf;
@@ -413,23 +406,23 @@ int main(int argc, char **argv)
 
   // State constraints
   const double eps = 1e-1;
-  Eigen::Matrix<double, 14, 1> lbx, ubx;
-  //lbx << -inf, -inf, 0,   -inf, -inf, 0-eps,   -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf,  0-eps;
-  //ubx << inf,   inf, inf,  inf,  inf, 330+eps,  0.183+eps,  0.183+eps,  0.183+eps,  1+eps,    inf,  inf,  inf,  3.1+eps;
+  Eigen::Matrix<double, 9, 1> lbx, ubx;
+  lbx << -inf,  -inf,   -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf;
+  ubx << inf, inf,       0.183+eps,  0.183+eps,  0.183+eps,  1+eps,    inf,  inf,  inf;
   
-  lbx << -inf, -inf, -inf,   -inf, -inf, -inf,   -inf, -inf, -inf, -inf,   -inf, -inf, -inf,     -inf;
-  ubx << inf,  inf, inf,     inf,  inf, inf,    inf,  inf,  inf,  inf,     inf,  inf,  inf,      inf;
+  lbx << -inf,   -inf,   -inf, -inf, -inf, -inf,   -inf, -inf, -inf;
+  ubx << inf,     inf,    inf,  inf,  inf,  inf,    inf,  inf,  inf;
 
-  solver.upper_bound_x().head(154) = ubx.replicate(11,1);
-  solver.lower_bound_x().head(154) = lbx.replicate(11,1);
+  solver.upper_bound_x().head(99) = ubx.replicate(11,1);
+  solver.lower_bound_x().head(99) = lbx.replicate(11,1);
 
   // Init solution
-  solver.primal_solution().head<154>() = init_cond.replicate(11, 1);
+  solver.primal_solution().head<99>() = init_cond.replicate(11, 1);
 		  
   // --------------------------------------------------------------------------------------------------------------------
 
   // Thread to compute control. Duration defines interval time in seconds
-  ros::Timer control_thread = n.createTimer(ros::Duration(0.1),
+  ros::Timer control_thread = n.createTimer(ros::Duration(0.03),
   [&](const ros::TimerEvent&) 
 	{
     // Get current FSM and time
@@ -446,9 +439,10 @@ int main(int argc, char **argv)
 
 		else if (current_fsm.state_machine.compare("Launch") == 0)
 		{ 
-      solver.primal_solution().head<154>() = init_cond.replicate(11, 1);
-		  solver.upper_bound_x().segment(140, 14) = init_cond;
-		  solver.lower_bound_x().segment(140, 14) = init_cond;
+      //solver.m_lam.setZero();
+      solver.primal_solution().head<99>() = init_cond.replicate(11, 1);
+		  solver.upper_bound_x().segment(90, 9) = init_cond;
+		  solver.lower_bound_x().segment(90, 9) = init_cond;
 
 		  // Solve problem and save solution
 			double time_now = ros::Time::now().toSec();
@@ -458,7 +452,7 @@ int main(int argc, char **argv)
 		 
 
 		  // Get state and control solution
-		  Eigen::Matrix<double, 14, 11> trajectory; trajectory << Eigen::Map<Eigen::Matrix<double, 14, 11>>(solver.primal_solution().head(154).data(), 14, 11);
+		  Eigen::Matrix<double, 9, 11> trajectory; trajectory << Eigen::Map<Eigen::Matrix<double, 9, 11>>(solver.primal_solution().head(99).data(), 9, 11);
 		  Eigen::Matrix<double, 4, 11> control_MPC_full; control_MPC_full << Eigen::Map<Eigen::Matrix<double, 4, 11>>(solver.primal_solution().tail(44).data(), 4, 11);
 
 			//std::cout << control_MPC_full << "\n";
@@ -476,21 +470,22 @@ int main(int argc, char **argv)
       // Simple P controller. Thrust in z is used to reach apogee, Thrust in x and y is used to keep vertical orientation
 			thrust_force.z = (1000 - current_state.pose.position.z)*100;
 
-      thrust_force.x = -current_state.pose.orientation.x*90/rocket.dry_CM;
-      thrust_force.y = -current_state.pose.orientation.y*90/rocket.dry_CM;
+      thrust_force.x = current_state.pose.orientation.y*1;
+      thrust_force.y = current_state.pose.orientation.x*1;
 
-			//thrust_force.x = input[0];
-			//thrust_force.y = input[1];
-			//thrust_force.z = input[2];
+			thrust_force.x = input[0];
+			thrust_force.y = input[1];
+			thrust_force.z = input[2];
 
 
       if(thrust_force.z > rocket.maxThrust) thrust_force.z = rocket.maxThrust;
       if(thrust_force.z < rocket.minThrust) thrust_force.z = rocket.minThrust;
       
-      if(thrust_force.x > 100) thrust_force.x = 100;
-      if(thrust_force.x < -100) thrust_force.x = -100;
-      if(thrust_force.y > 100) thrust_force.y = 100;
-      if(thrust_force.y < -100) thrust_force.y = -100;
+      float max_side_force = 10;
+      if(thrust_force.x > max_side_force) thrust_force.x = max_side_force;
+      if(thrust_force.x < -max_side_force) thrust_force.x = -max_side_force;
+      if(thrust_force.y > max_side_force) thrust_force.y = max_side_force;
+      if(thrust_force.y < -max_side_force) thrust_force.y = -max_side_force;
 
       // Torque in X and Y is defined by thrust in X and Y. Torque in Z is free variable
       thrust_torque.x = thrust_force.x*0.4; 

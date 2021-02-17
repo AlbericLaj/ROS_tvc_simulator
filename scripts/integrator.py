@@ -162,7 +162,7 @@ if __name__ == '__main__':
 	rocket_sim = init_integrator()
 
 	# Init state (position, speed, quaternion, angular speed)
-	S_new = np.array([0,0,0, 0,0,30,     0.0, 0.0,  0.0,  1.0,      0.0, 0.0, 0.0     , rocket_sim.rocket.get_propellant_mass()])
+	S_new = np.array([0,0,0, 0,0,0,     0.0, 0.0,  0.0,  1.0,      0.0, 0.0, 0.0     , rocket_sim.rocket.get_propellant_mass()])
 	T_new = 0
 	
 	solver_dopri5 =  ode(rocket_sim.Dynamics_6DOF).set_integrator('dopri5') 
@@ -183,13 +183,13 @@ if __name__ == '__main__':
       # Force and torque is sum of control and disturbance
 			if current_fsm.state_machine == "Launch":
 
-				thrust_force[0] = current_control.force.x# + current_disturbance.force.x
-				thrust_force[1] = current_control.force.y# + current_disturbance.force.y
-				thrust_force[2] = current_control.force.z# + current_disturbance.force.z
+				thrust_force[0] = current_control.force.x + current_disturbance.force.x
+				thrust_force[1] = current_control.force.y + current_disturbance.force.y
+				thrust_force[2] = current_control.force.z + current_disturbance.force.z
 
-				thrust_torque[0] = current_control.torque.x# + current_disturbance.torque.x
-				thrust_torque[1] = current_control.torque.y# + current_disturbance.torque.y
-				thrust_torque[2] = current_control.torque.z# + current_disturbance.torque.z
+				thrust_torque[0] = current_control.torque.x + current_disturbance.torque.x
+				thrust_torque[1] = current_control.torque.y + current_disturbance.torque.y
+				thrust_torque[2] = current_control.torque.z + current_disturbance.torque.z
 
       # Force and torque is only disturbance (no more fuel for control)
 			elif current_fsm.state_machine == "Coast":
@@ -209,7 +209,7 @@ if __name__ == '__main__':
 			start_time = rospy.get_time()
 			
 			# Actual integration of the state "S_new" using the control law
-			integration_ivp = solve_ivp(rocket_sim.Dynamics_6DOF, [T_new, T_new+integration_period], S_new, method = 'RK23', args = (thrust_force, thrust_torque))
+			integration_ivp = solve_ivp(rocket_sim.Dynamics_6DOF, [T_new, T_new+0.01], S_new, method = 'RK23', args = (thrust_force, thrust_torque))
 			
 			#solver_dopri5.set_initial_value(S_new, T_new).set_f_params(thrust_force, thrust_torque)
 			#S_new = solver_dopri5.integrate(T_new+integration_period)
