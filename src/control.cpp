@@ -22,6 +22,7 @@
 #include "solvers/box_admm.hpp"
 #include "solvers/admm.hpp"
 #include "solvers/osqp_interface.hpp"
+#include "control/mpc_wrapper.hpp"
 
 #include "utils/helpers.hpp"
 
@@ -82,7 +83,6 @@ Rocket rocket;
 
 // Global variable with last received rocket state
 tvc_simulator::State current_state;
-Eigen::Matrix<double, 9, 1> init_cond; // Used for MPC init
 
 // Global variable with last requested fsm
 tvc_simulator::FSM current_fsm;
@@ -92,13 +92,7 @@ void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
 {
 	current_state.pose = rocket_state->pose;
   current_state.twist = rocket_state->twist;
-  current_state.propeller_mass = rocket_state->propeller_mass;
-
-	init_cond <<  rocket_state->pose.position.z/1000,
-								rocket_state->twist.linear.z/1000,
-								rocket_state->pose.orientation.x, rocket_state->pose.orientation.y, rocket_state->pose.orientation.z, rocket_state->pose.orientation.w, 
-								rocket_state->twist.angular.x, rocket_state->twist.angular.y, rocket_state->twist.angular.z;
-						
+  current_state.propeller_mass = rocket_state->propeller_mass;						
 }
 
 
@@ -150,10 +144,10 @@ public:
     {
         Q.setZero();
         R.setZero();
-        Q.diagonal() << 50,  0,    100, 100, 100, 100,     10, 10, 10;
-        R.diagonal() << 5, 5, 0, 5;
+        Q.diagonal() << 50,  0,    500, 500, 500, 500,     100, 100, 100;
+        R.diagonal() << 0, 0, 0, 0;
         P.setIdentity();
-        P.diagonal() << 50,  0,    100, 100, 100, 100,     10, 10, 10;
+        P.diagonal() << 50,  0,    500, 500, 500, 500,     100, 100, 100;
 
         xs << 5/1000,
               0,
@@ -384,41 +378,47 @@ int main(int argc, char **argv)
   
 	// Init MPC ----------------------------------------------------------------------------------------------------------------------
 	// Creates solver
-	MySolver<control_ocp, osqp_solver_t> solver;
-  solver.settings().max_iter = 2;
-  solver.settings().line_search_max_iter = 10;
-  solver.m_qp_solver.settings().max_iter = 200;
-  solver.m_qp_solver.settings().scaling = 10;
+  using mpc_t = MPC<control_ocp, MySolver, osqp_solver_t>;
+	mpc_t mpc;
+	
+  mpc.settings().max_iter = 1;
+  mpc.settings().line_search_max_iter = 10;
+  //mpc.m_solver.settings().max_iter = 1000;
+  //mpc.m_solver.settings().scaling = 10;
 
 
   // Input constraints
   const double inf = std::numeric_limits<double>::infinity();
-  Eigen::Matrix<double, 4, 1> lbu, ubu;
-  lbu << -1, -1, -1, -1;
-  ubu <<  1,  1,  1 , 1;
+  mpc_t::control_t lbu; 
+  mpc_t::control_t ubu; 
+  
+  lbu << -1, -1, -1, -1; // lower bound on control
+  ubu << 1, 1, 1, 1; // upper bound on control
   
   //lbu << -inf, -inf, -inf, -inf;
-  //ubu << inf, inf, inf, inf;
-
-  solver.upper_bound_x().tail(44) = ubu.replicate(11,1);
-  solver.lower_bound_x().tail(44) = lbu.replicate(11,1);
-
+  //ubu <<  inf,  inf,  inf,  inf;
+  mpc.control_bounds(lbu, ubu);
 
   // State constraints
   const double eps = 1e-1;
-  Eigen::Matrix<double, 9, 1> lbx, ubx;
+  mpc_t::state_t lbx; 
+  mpc_t::state_t ubx; 
+
   lbx << -inf,  -inf,   -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf;
   ubx << inf, inf,       0.183+eps,  0.183+eps,  0.183+eps,  1+eps,    inf,  inf,  inf;
   
   lbx << -inf,   -inf,   -inf, -inf, -inf, -inf,   -inf, -inf, -inf;
   ubx << inf,     inf,    inf,  inf,  inf,  inf,    inf,  inf,  inf;
+  mpc.state_bounds(lbx, ubx);
+  
 
-  solver.upper_bound_x().head(99) = ubx.replicate(11,1);
-  solver.lower_bound_x().head(99) = lbx.replicate(11,1);
-
-  // Init solution
-  solver.primal_solution().head<99>() = init_cond.replicate(11, 1);
-		  
+  // Initial state
+  mpc_t::state_t x0;
+  x0 << 0,
+				0,
+				0, 0, 0, 1, 
+        0, 0, 0;
+  mpc.x_guess(x0.replicate(9,1));		  
   // --------------------------------------------------------------------------------------------------------------------
 
   // Thread to compute control. Duration defines interval time in seconds
@@ -439,26 +439,26 @@ int main(int argc, char **argv)
 
 		else if (current_fsm.state_machine.compare("Launch") == 0)
 		{ 
-      //solver.m_lam.setZero();
-      solver.primal_solution().head<99>() = init_cond.replicate(11, 1);
-		  solver.upper_bound_x().segment(90, 9) = init_cond;
-		  solver.lower_bound_x().segment(90, 9) = init_cond;
+      x0 << current_state.pose.position.z/1000,
+						current_state.twist.linear.z/1000,
+						current_state.pose.orientation.x, current_state.pose.orientation.y, current_state.pose.orientation.z, current_state.pose.orientation.w, 
+						current_state.twist.angular.x, current_state.twist.angular.y, current_state.twist.angular.z; 
+      mpc.initial_conditions(x0);
 
 		  // Solve problem and save solution
 			double time_now = ros::Time::now().toSec();
-		  solver.solve();
-			ROS_INFO("T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), solver.info().status.value, solver.m_qp_solver.m_info.iter);
-
+		  mpc.solve();
+			ROS_INFO("T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
 		 
 
 		  // Get state and control solution
-		  Eigen::Matrix<double, 9, 11> trajectory; trajectory << Eigen::Map<Eigen::Matrix<double, 9, 11>>(solver.primal_solution().head(99).data(), 9, 11);
-		  Eigen::Matrix<double, 4, 11> control_MPC_full; control_MPC_full << Eigen::Map<Eigen::Matrix<double, 4, 11>>(solver.primal_solution().tail(44).data(), 4, 11);
+		  //Eigen::Matrix<double, 9, 11> trajectory; trajectory << Eigen::Map<Eigen::Matrix<double, 9, 11>>(solver.primal_solution().head(99).data(), 9, 11);
+		  //Eigen::Matrix<double, 4, 11> control_MPC_full; control_MPC_full << Eigen::Map<Eigen::Matrix<double, 4, 11>>(solver.primal_solution().tail(44).data(), 4, 11);
 
 			//std::cout << control_MPC_full << "\n";
 
 			Eigen::Matrix<double, 4, 1> control_MPC;
-			control_MPC =  control_MPC_full.col( control_MPC_full.cols()-1 );
+      control_MPC =  mpc.solution_u_at(0).transpose();
 			//ROS_INFO("Fx: %f, Fy: %f, Fz: %f, Mx: %f \n",  control_MPC[0], control_MPC[1], control_MPC[2], control_MPC[3]);
 			//Eigen::Matrix<double, 4,1> input; input << 100*control_MPC(0), 100*control_MPC(1), 1000*(control_MPC(2)+1), 50*control_MPC(3);
 			

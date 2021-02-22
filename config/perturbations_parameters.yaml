@@ -1,8 +1,8 @@
 # Perturbations parameters
 
 wind_gust_intensity:      # Wind speed in [m/s] (world X and Y)
-  - 5 
-  - 5
+  - 4 
+  - 4
 wind_gust_assymetry: 0.5  # Range of gust position, from 0 to 1 rocket length
 wind_gust_var: 5          # Gust standart deviation as percentage of wind gust intensity
 

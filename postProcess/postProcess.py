@@ -17,7 +17,7 @@ import time
 import rosbag
 
 tStart = -1
-tEnd = 100
+tEnd = 7
 
 position = np.zeros((1,3))
 speed = np.zeros((1,3))

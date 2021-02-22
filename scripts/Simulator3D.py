@@ -224,7 +224,8 @@ class Simulator3D:
         md = -0.5 * rho * cdm * Sm * v_mag ** 2 * normalize_vector(w_pitch)
         
 
-        m_tot = c.dot(thrust_torque.transpose()) #+ mn + md 
+        m_tot = c.dot(thrust_torque.transpose())# + mn + md 
+        #print(m_tot)
         
 
         # Translational dynamics
