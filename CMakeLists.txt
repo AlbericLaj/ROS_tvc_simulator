@@ -244,6 +244,7 @@ include_directories(
 
 add_executable(time_keeper src/time_keeper.cpp)
 target_link_libraries(time_keeper ${catkin_LIBRARIES})
+add_dependencies(time_keeper ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(control src/control.cpp)
 target_link_libraries(control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
@@ -251,10 +252,13 @@ add_dependencies(control ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(guidance src/guidance.cpp)
 target_link_libraries(guidance ${catkin_LIBRARIES})
+add_dependencies(guidance ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(data_fusion src/data_fusion.cpp)
 target_link_libraries(data_fusion ${catkin_LIBRARIES})
+add_dependencies(data_fusion ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(visualization src/visualization.cpp)
 target_link_libraries(visualization ${catkin_LIBRARIES})
+add_dependencies(visualization ${${PROJECT_NAME}_EXPORTED_TARGETS})
 

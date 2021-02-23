@@ -19,8 +19,36 @@ rosdep update
 git clone https://gitlab.com/libeigen/eigen.git
 sudo cp -r -t /usr/local/include/ eigen/Eigen/ eigen/unsupported/
 ```
-3. Install python dependancies:
+3. Install [OSQP](https://osqp.org/)
+```bash
+git clone https://github.com/oxfordcontrol/osqp
+cd osqp
+mkdir build
+cd build
+cmake -G "Unix Makefiles" ..
+cmake --build . --target install
+```
+4. Install [OSQP-eigen](https://github.com/robotology/osqp-eigen)
+```bash
+git clone https://github.com/robotology/osqp-eigen.git
+cd osqp-eigen
+mkdir build && cd build
+cmake ../
+make
+sudo make install
+export OsqpEigen_DIR=/path/where/you/installed/
+```
+
+5. You may need a cmake version >3.12. (Check with cmake --version). To install the latest version:
+   Download the latest version from [here](https://cmake.org/download/) and copy the script in /opt/.
+```bash
+chmod +x /opt/cmake-3.*your_version*.sh
+sudo bash /opt/cmake-3.*your_version.sh*
+sudo ln -s /opt/cmake-3.*your_version*/bin/* /usr/local/bin
+```
+
+6. Install python dependencies:
 ```bash
 sudo apt install python3-pip
-pip3 install rospkg dataclasses scipy numpy 
+pip3 install rospkg dataclasses scipy numpy pyqtgraph
 ```
