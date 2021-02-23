@@ -42,6 +42,11 @@ int main(int argc, char **argv) {
     current_state.pose.orientation.z = 0;
     current_state.pose.orientation.w = 1;
 
+    //initialize control
+    current_control.force.x = 0;
+    current_control.force.y = 0;
+    current_control.force.z = 0;
+
 
     // Subscribe to state message
     ros::Subscriber rocket_state_sub = n.subscribe("rocket_state", 1000, rocket_stateCallback);
@@ -71,7 +76,7 @@ int main(int argc, char **argv) {
     transformStamped.transform.rotation.w = q.w();
 
 
-    visualization_msgs::Marker rocket_marker;
+    visualization_msgs::Marker rocket_marker, thrust_vector;
 
     rocket_marker.header.frame_id = "world";
     // Set the body action.  Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
@@ -96,9 +101,29 @@ int main(int argc, char **argv) {
     rocket_marker.color.b = 1.0f;
     rocket_marker.color.a = 1.0;
 
+    //thrust vector
+    const float shaft_diameter = 1;
+    const float arrow_diameter = 2;
+    const float head_length = 2;
+    const float thrust_scaling = 0.01;
+    //TODO use real offset and correct rocket scaling
+    const float offset = 20;
+
+    thrust_vector.header.frame_id = "world";
+    thrust_vector.action = visualization_msgs::Marker::ADD;
+    thrust_vector.ns = "thrust_vector";
+    thrust_vector.id = 2;
+    thrust_vector.type = visualization_msgs::Marker::ARROW;
+    thrust_vector.scale.x = shaft_diameter;
+    thrust_vector.scale.y = arrow_diameter;
+    thrust_vector.scale.z = head_length;
+    thrust_vector.color.r = 1.0;
+    thrust_vector.color.a = 1.0;
+
+    //TODO remove
+    rocket_marker.pose.orientation = current_state.pose.orientation;
+
     while (ros::ok()) {
-
-
         // Set the pose of the marker.  This is a full 6DOF pose relative to the frame/time specified in the header
         rocket_marker.pose.position = current_state.pose.position;
         rocket_marker.pose.orientation = current_state.pose.orientation;
@@ -113,6 +138,34 @@ int main(int argc, char **argv) {
 
         transformStamped.header.stamp = ros::Time::now();
 
+        //update thrust vector
+        thrust_vector.points.resize(2);
+
+        //rotate thrust vector
+        tf2::Quaternion q_rot;
+        tf2::convert(current_state.pose.orientation, q_rot);
+
+        tf2::Quaternion thrust_vector_body(-current_control.force.x, -current_control.force.y, -current_control.force.z, 0);
+        tf2::Quaternion thrust_vector_inertial = q_rot * thrust_vector_body * q_rot.inverse();
+
+        tf2::Quaternion minus_z_body(0, 0, -1, 0);
+        tf2::Quaternion minus_z_inertial = q_rot * minus_z_body * q_rot.inverse();
+
+        //start of arrow, offset in the direction -z from the center of mass
+        thrust_vector.points[0] = current_state.pose.position;
+        thrust_vector.points[0].x += minus_z_inertial.x() * offset;
+        thrust_vector.points[0].y += minus_z_inertial.y() * offset;
+        thrust_vector.points[0].z += minus_z_inertial.z() * offset;
+
+        //end of arrow
+        thrust_vector.points[1] = thrust_vector.points[0];
+        thrust_vector.points[1].x += thrust_vector_inertial.x() * thrust_scaling;
+        thrust_vector.points[1].y += thrust_vector_inertial.y() * thrust_scaling;
+        thrust_vector.points[1].z += thrust_vector_inertial.z() * thrust_scaling;
+
+        thrust_vector.header.stamp = ros::Time::now();
+        thrust_vector.lifetime = ros::Duration();
+
         // Publish the marker
         while (viz_pub.getNumSubscribers() < 1) {
             if (!ros::ok()) {
@@ -125,6 +178,7 @@ int main(int argc, char **argv) {
         //
         tfb.sendTransform(transformStamped);
         viz_pub.publish(rocket_marker);
+        viz_pub.publish(thrust_vector);
         ros::spinOnce();
 
         r.sleep();
