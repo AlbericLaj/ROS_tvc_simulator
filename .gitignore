@@ -2,3 +2,5 @@
 *.user
 log.bag
 
+
+log/log.bag.active
