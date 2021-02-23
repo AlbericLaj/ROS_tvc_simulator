@@ -1,4 +1,5 @@
 *.pyc
 *.user
+.idea
+cmake-build-debug
 log.bag
-
