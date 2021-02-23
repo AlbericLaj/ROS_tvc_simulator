@@ -14,7 +14,7 @@
 #include <sstream>
 #include <string>
 
-#define CONTROL_HORIZON 2 // In seconds
+#define CONTROL_HORIZON 3 // In seconds
 
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
@@ -99,13 +99,6 @@ void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
 	current_state.pose = rocket_state->pose;
   current_state.twist = rocket_state->twist;
   current_state.propeller_mass = rocket_state->propeller_mass;
-
-	init_cond << rocket_state->pose.position.x/1000, rocket_state->pose.position.y/1000, rocket_state->pose.position.z/1000,
-								rocket_state->twist.linear.x/1000, rocket_state->twist.linear.y/1000, rocket_state->twist.linear.z/1000,
-								rocket_state->pose.orientation.x, rocket_state->pose.orientation.y, rocket_state->pose.orientation.z, rocket_state->pose.orientation.w, 
-								rocket_state->twist.angular.x, rocket_state->twist.angular.y, rocket_state->twist.angular.z,
-								rocket_state->propeller_mass;
-						
 }
 
 
@@ -269,7 +262,34 @@ public:
 
   EIGEN_STRONG_INLINE Problem& get_problem() noexcept { return this->problem; }
 
-
+    /** change Hessian regularization to non-default*/
+    EIGEN_STRONG_INLINE void hessian_regularisation_dense_impl(Eigen::Ref<nlp_hessian_t> lag_hessian) noexcept
+    { //Three methods: adding a constant identity matrix, estimating eigen values with Greshgoring circles, Eigen Value Decomposition        
+      const int n = this->m_H.rows();                
+      
+      /**Regularize by the estimation of the minimum negative eigen value--does not work with inexact Hessian update(matrix is already PSD)*/
+      scalar_t aii, ri;
+      for (int i = 0; i < n; i++)
+      {
+        aii = lag_hessian(i,i);
+        ri  = (lag_hessian.col(i).cwiseAbs()).sum() - abs(aii); // The hessian is symmetric, Greshgorin discs from rows or columns are equal
+        if (aii - ri <= 0) {lag_hessian(i,i) += (ri - aii) + scalar_t(0.01);} //All Greshgorin discs are in the positive half               
+        }
+    }
+    EIGEN_STRONG_INLINE void hessian_regularisation_sparse_impl(nlp_hessian_t& lag_hessian) noexcept
+    {//Three methods: adding a constant identity matrix, estimating eigen values with Gershgorin circles, Eigen Value Decomposition
+        const int n = this->m_H.rows(); //132=m_H.toDense().rows()        
+        
+        /**Regularize by the estimation of the minimum negative eigen value*/
+        scalar_t aii, ri;
+        for (int i = 0; i < n; i++)
+        {
+            aii = lag_hessian.coeffRef(i, i);
+            ri = (lag_hessian.col(i).cwiseAbs()).sum() - abs(aii); // The hessian is symmetric, Greshgorin discs from rows or columns are equal            
+            if (aii - ri <= 0)
+                lag_hessian.coeffRef(i, i) += (ri - aii) + 0.001;//All Gershgorin discs are in the positive half
+        }
+    }
 
     /** change step size selection algorithm */
     scalar_t step_size_selection_impl(const Ref<const nlp_variable_t>& p) noexcept
@@ -400,7 +420,7 @@ int main(int argc, char **argv)
 	using mpc_t = MPC<control_ocp, MySolver, osqp_solver_t>;
 	mpc_t mpc;
 	
-  mpc.settings().max_iter = 1;
+  mpc.settings().max_iter = 2;
   mpc.settings().line_search_max_iter = 10;
   //mpc.m_solver.settings().max_iter = 1000;
   //mpc.m_solver.settings().scaling = 10;
@@ -414,8 +434,8 @@ int main(int argc, char **argv)
   lbu << -1, -1, -1, -1; // lower bound on control
   ubu << 1, 1, 1, 1; // upper bound on control
   
-  lbu << -inf, -inf, -inf, -inf;
-  ubu <<  inf,  inf,  inf,  inf;
+  //lbu << -inf, -inf, -inf, -inf;
+  //ubu <<  inf,  inf,  inf,  inf;
   mpc.control_bounds(lbu, ubu);
 
 
@@ -424,16 +444,22 @@ int main(int argc, char **argv)
   mpc_t::state_t lbx; 
   mpc_t::state_t ubx; 
   
-  //lbx << -inf, -inf, 0,   -inf, -inf, 0-eps,   -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf,  0-eps;
-  //ubx << inf,   inf, inf,  inf,  inf, 330+eps,  0.183+eps,  0.183+eps,  0.183+eps,  1+eps,    inf,  inf,  inf,  3.1+eps;
+  lbx << -inf, -inf, 0,   -inf, -inf, 0-eps,   -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf,  0-eps;
+  ubx << inf,   inf, inf,  inf,  inf, 330+eps,  0.183+eps,  0.183+eps,  0.183+eps,  1+eps,    inf,  inf,  inf,  3.1+eps;
   
-  lbx << -inf, -inf, -inf,   -inf, -inf, -inf,   -inf, -inf, -inf, -inf,   -inf, -inf, -inf,     -inf;
-  ubx << inf,  inf, inf,     inf,  inf, inf,    inf,  inf,  inf,  inf,     inf,  inf,  inf,      inf;
+  //lbx << -inf, -inf, -inf,   -inf, -inf, -inf,   -inf, -inf, -inf, -inf,   -inf, -inf, -inf,     -inf;
+  //ubx << inf,  inf, inf,     inf,  inf, inf,    inf,  inf,  inf,  inf,     inf,  inf,  inf,      inf;
   mpc.state_bounds(lbx, ubx);
   
 
   // Initial state
   mpc_t::state_t x0;
+  x0 << 0, 0, 0,
+        0, 0, 0,
+        0, 0, 0, 1, 
+        0, 0, 0,
+        3;
+  mpc.x_guess(x0.replicate(14,1));	
 		  
   // --------------------------------------------------------------------------------------------------------------------
 
@@ -468,8 +494,14 @@ int main(int argc, char **argv)
 
 		else if (current_fsm.state_machine.compare("Launch") == 0)
 		{
-      x0 = init_cond;
+      x0 <<   current_state.pose.position.x/1000, current_state.pose.position.y/1000, current_state.pose.position.z/1000,
+							current_state.twist.linear.x/1000, current_state.twist.linear.y/1000, current_state.twist.linear.z/1000,
+							current_state.pose.orientation.x, current_state.pose.orientation.y, current_state.pose.orientation.z,current_state.pose.orientation.w, 
+							current_state.twist.angular.x, current_state.twist.angular.y, current_state.twist.angular.z,
+							current_state.propeller_mass;
+
       mpc.initial_conditions(x0);
+      mpc.x_guess(x0.replicate(14,1));	
 
 		  // Solve problem and save solution
 			double time_now = ros::Time::now().toSec();
@@ -481,7 +513,7 @@ int main(int argc, char **argv)
 		  // Get state and control solution
 
 			Eigen::Matrix<double, 4, 1> control_MPC;
-			control_MPC =  mpc.solution_u_at(0.0).transpose();
+			control_MPC =  mpc.solution_u_at(0);
 			//Eigen::Matrix<double, 4,1> input; input << 100*control_MPC(0), 100*control_MPC(1), 1000*(control_MPC(2)+1), 50*control_MPC(3);
 			//std::cout << mpc.solution_x_reshaped() << "\n";
 			
