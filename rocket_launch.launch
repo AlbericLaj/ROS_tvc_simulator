@@ -11,7 +11,7 @@
   <group ns="perturbation">
       <rosparam file="$(find tvc_simulator)/config/perturbations_parameters.yaml" />
   </group>
-
+''
 
   <node name="control" pkg="tvc_simulator" type="control" output ="screen"/>
   <node name="guidance" pkg="tvc_simulator" type="guidance" output ="screen"  />

@@ -42,8 +42,8 @@ class Rocket
     float dry_mass;
     float propellant_mass;
     float Isp;
-    float maxThrust;
-    float minThrust;
+    std::vector<float> maxThrust{0, 0, 0};
+    std::vector<float> minThrust{0, 0, 0};
     float dry_CM;
 
     std::vector<float> target_apogee = {0, 0, 0};
@@ -481,7 +481,7 @@ int main(int argc, char **argv)
                             0, 0, 0, 1, 
                             0, 0, 0,
                             target_point.propeller_mass;
-        std::cout << "Time: "<< srv_waypoint.request.target_time << " ,target: " << mpc.ocp().xs.transpose() << "\n";
+        //std::cout << "Time: "<< srv_waypoint.request.target_time << " ,target: " << mpc.ocp().xs.transpose() << "\n";
 
     }
 
@@ -505,7 +505,7 @@ int main(int argc, char **argv)
 		  // Solve problem and save solution
 			double time_now = ros::Time::now().toSec();
 		  mpc.solve();
-			ROS_INFO("T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
+			ROS_INFO("Ctr T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
 
 		 
 
@@ -533,8 +533,8 @@ int main(int argc, char **argv)
 			thrust_force.z = input[2];
 
 
-      if(thrust_force.z > rocket.maxThrust) thrust_force.z = rocket.maxThrust;
-      if(thrust_force.z < rocket.minThrust) thrust_force.z = rocket.minThrust;
+      if(thrust_force.z > rocket.maxThrust[2]) thrust_force.z = rocket.maxThrust[2];
+      if(thrust_force.z < rocket.minThrust[2]) thrust_force.z = rocket.minThrust[2];
       
       if(thrust_force.x > 100) thrust_force.x = 100;
       if(thrust_force.x < -100) thrust_force.x = -100;

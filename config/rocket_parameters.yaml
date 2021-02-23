@@ -28,8 +28,14 @@ dry_I:
 propellant_mass: 6 #3.693
 propellant_CM: 3
 Isp: 213
-maxThrust: 2400
-minThrust: 0
+maxThrust:
+  - 200
+  - 200
+  - 2400
+minThrust: 
+  - -200
+  - -200
+  - 0
 Cd:
   - 2
   - 2

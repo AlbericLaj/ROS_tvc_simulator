@@ -30,7 +30,7 @@
 #include <fstream>
 #include <chrono>
 
-void MPC_guidance();
+using namespace std;
 
 class Rocket
 {
@@ -38,14 +38,15 @@ class Rocket
     float dry_mass;
     float propellant_mass;
     float Isp;
-    float maxThrust;
-    float minThrust;
+    std::vector<float> maxThrust{0, 0, 0};
+    std::vector<float> minThrust{0, 0, 0};
 
     std::vector<float> target_apogee = {0, 0, 0};
     std::vector<float> Cd = {0, 0, 0};
     std::vector<float> surface = {0, 0, 0};
+    std::vector<float> drag_coeff = {0, 0, 0};
 
-  Rocket(ros::NodeHandle n)
+  void init(ros::NodeHandle n)
   {
     n.getParam("/rocket/maxThrust", maxThrust);
     n.getParam("/rocket/minThrust", minThrust);
@@ -67,17 +68,20 @@ class Rocket
     surface[0] = diameter[1]*length[nStage-1];
     surface[1] = surface[0];
     surface[2] = diameter[1]*diameter[1]/4 * 3.14159;
+
+    float rho_air = 1.225;
+    drag_coeff[0] = 0.5*rho_air*surface[0]*Cd[0];
+    drag_coeff[1] = 0.5*rho_air*surface[1]*Cd[1];
+    drag_coeff[2] = 0.5*rho_air*surface[2]*Cd[2];
   }
 
 };
 
-
+Rocket rocket;
 
 
 
 // Poly MPC stuff ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-using namespace std;
 
 typedef std::chrono::time_point<std::chrono::system_clock> time_point;
 time_point get_time()
@@ -96,6 +100,8 @@ time_point get_time()
 
 #define N_POINT POLY_ORDER*NUM_SEG // Number of collocation points
 
+#define HORIZON_LENGTH 30.0 // in seccnds
+
 /** benchmark the new collocation class */
 using Polynomial = polympc::Chebyshev<POLY_ORDER, polympc::GAUSS_LOBATTO, double>;
 using Approximation = polympc::Spline<Polynomial, NUM_SEG>;
@@ -109,13 +115,13 @@ public:
     ~guidance_ocp() = default;
 
     static constexpr double t_start = 0;
-    static constexpr double t_stop  = 30.0;
+    static constexpr double t_stop  = HORIZON_LENGTH;
 
-    Eigen::DiagonalMatrix<scalar_t, 7> Q{1.0, 1.0, 15, 0.2, 0.2, 0.5, 2.0};
-    Eigen::DiagonalMatrix<scalar_t, 3> R{0.1, 0.1, 0.3};
-    Eigen::DiagonalMatrix<scalar_t, 7> QN{1.0, 1.0, 100, 0.2, 0.2, 0.5, 5.0};
+    Eigen::DiagonalMatrix<scalar_t, 7> Q{1.0, 1.0, 15, 0.2, 0.2, 0.5, 0};
+    Eigen::DiagonalMatrix<scalar_t, 3> R{0.1, 0.1, 0};
+    Eigen::DiagonalMatrix<scalar_t, 7> QN{1.0, 1.0, 100, 0.2, 0.2, 0.5, 0};
 
-    Eigen::Matrix<scalar_t, 7,1> xs{0.0, 0.0, 2000.0, 0.0, 0.0, 0.0, 0.0};
+    Eigen::Matrix<scalar_t, 7,1> xs;
     Eigen::Matrix<scalar_t, 3,1> us{0.0, 0.0, 5*40*9.81};
 
     template<typename T>
@@ -123,38 +129,17 @@ public:
                               const Eigen::Ref<const parameter_t<T>> p, const Eigen::Ref<const static_parameter_t> &d,
                               const T &t, Eigen::Ref<state_t<T>> xdot) const noexcept
     {
-        // -------------- Constant Rocket parameters ----------------------------------------
-
-        T dry_mass = (T)40;                         // final rocket mass in [kg]
-        
-
-        T Isp = (T)211;                             // Specific Impulse in [s]
-
-        Eigen::Array<T, 3, 1> Cd; Cd << (T)1.5, (T)2.5, (T)0.7;
-
-        T diameter = (T)15.6e-2;                    // Rocket diameter in [m]
-        T length = (T)4;                            // Rocket length in [m]
-        T surface_front = (T)(3.14159*(diameter/2)*(diameter/2)); // Cross-section surface in [m^2]
-        T surface_side = (T)(length*diameter);      // Surface of the rocket seen from the side [m^2]
-
-        Eigen::Array<T, 3, 1> surface; surface << surface_side, surface_side, surface_front;
-
-        // -------------- Constant external parameters ------------------------------------
-        T g0 = (T)9.81;                             // Earth gravity in [m/s^2]
-        //T rho_air = (T)(353*pow(1-0.0000225577*x(2), x(1))/(288.15-0.0065*x(2)));
-        T rho_air = (T)1.225;
-
+        std::cout << x << "\n" << u << "\n\n";
         // -------------- Simulation variables -----------------------------
-        T mass = dry_mass + x(6);                   // Instantaneous mass of the rocekt in [kg]
-        Eigen::Array<T, 3, 1> speed; speed << (T)x(3), (T)x(4), (T)x(5);
+        T mass = (T)rocket.dry_mass + x(6);                   // Instantaneous mass of the rocekt in [kg]
+        T g0 = (T)9.81;                             // Earth gravity in [m/s^2]
 
-        // External force in 3D in [N]
 
-        Eigen::Matrix<T, 3, 1> drag;
-        drag = (Eigen::Matrix<T, 3, 1>)((T)0.5*Cd*surface*rho_air*speed*speed);
+        // Force in 3D in [N]: Drag, Gravity and Thrust --------------------
 
-        //std::cout << "Drag: " <<  drag.transpose() << "\n";
-        //std::cout << "Speed: " <<  speed.transpose() << "\n\n";
+        // Drag is drag_coefficient*speed²
+        Eigen::Matrix<T, 3, 1> drag; drag << (T)rocket.drag_coeff[0], (T)rocket.drag_coeff[1], (T)rocket.drag_coeff[2];
+        drag = drag.cwiseProduct(x.segment(3,3).cwiseProduct(x.segment(3,3)));
 
         Eigen::Matrix<T, 3, 1> gravity;
         gravity << (T)0, (T)0, g0*mass;
@@ -166,17 +151,13 @@ public:
         // -------------- Differential equation ---------------------
 
         // Position variation is mass
-        xdot(0) = x(3);
-        xdot(1) = x(4);
-        xdot(2) = x(5);
+        xdot.head(3) = x.segment(3,3);
 
         // Speed variation is Force/mass
-        xdot(3) = total_force(0)/mass;
-        xdot(4) = total_force(1)/mass;
-        xdot(5) = total_force(2)/mass;
+        xdot.segment(3,3) = total_force/mass;  
 
         // Mass variation is proportional to thrust
-        xdot(6) = -u(2)/(Isp*g0);
+        xdot(6) = -u(2)/((T)rocket.Isp*g0);
     }
 
     template<typename T>
@@ -399,8 +380,8 @@ int main(int argc, char **argv)
 	current_fsm.time_now = 0;
 	current_fsm.state_machine = "Idle";
 
-  // Initialize rocket class with useful parameters
-  Rocket rocket(n);
+    // Initialize rocket class with useful parameters
+  rocket.init(n);
 
 	// Init MPC ----------------------------------------------------------------------------------------------------------------------
 	
@@ -415,8 +396,8 @@ int main(int argc, char **argv)
   mpc_t::control_t lbu; 
   mpc_t::control_t ubu; 
 
-  lbu << -200.0, -200.0, 0.0; // lower bound on control
-	ubu << 200.0, 200.0, 2000.0; // lower bound on control
+  lbu << rocket.minThrust[0], rocket.minThrust[1], rocket.minThrust[2]; // lower bound on control
+	ubu << rocket.maxThrust[0], rocket.maxThrust[1], rocket.maxThrust[2]; // lower bound on control
   
   //lbu << -inf, -inf, -inf;
   //ubu <<  inf,  inf,  inf;
@@ -428,8 +409,8 @@ int main(int argc, char **argv)
   mpc_t::state_t lbx; 
   mpc_t::state_t ubx; 
   
-  lbx << -inf, -inf, 0,   -inf, -inf, 0-eps,   0-eps;
-  ubx << inf,   inf, inf,  inf,  inf, 330+eps, 10+eps;
+  lbx << -inf, -inf, 0,       -inf, -inf, 0-eps,      0-eps;
+  ubx <<  inf,  inf, inf,      inf,  inf, 330+eps,    rocket.propellant_mass+eps;
   
   //lbx << -inf, -inf, -inf,   -inf, -inf, -inf,   -inf, -inf, -inf, -inf,   -inf, -inf, -inf,     -inf;
   //ubx << inf,  inf, inf,     inf,  inf, inf,    inf,  inf,  inf,  inf,     inf,  inf,  inf,      inf;
@@ -440,8 +421,11 @@ int main(int argc, char **argv)
   mpc_t::state_t x0;
   x0 << 0, 0, 0,
         0, 0, 0,
-        5;
+        rocket.propellant_mass;
   mpc.x_guess(x0.replicate(7,1));	
+
+  // Target point
+  mpc.ocp().xs << rocket.target_apogee[0], rocket.target_apogee[1], rocket.target_apogee[2],      0.0, 0.0, 0.0,        0.0;
 	
   // Thread to compute guidance. Duration defines interval time in seconds
   ros::Timer guidance_thread = n.createTimer(ros::Duration(0.5),
@@ -471,7 +455,8 @@ int main(int argc, char **argv)
         // Solve problem and save solution
         double time_now = ros::Time::now().toSec();
         mpc.solve();
-        ROS_INFO("T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
+        ROS_INFO("Gdc T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
+        std::cout << mpc.solution_u_at(0) << "\n";
 
 				int i;
 				for(i=0; i<N_POINT; i++)
@@ -489,7 +474,7 @@ int main(int argc, char **argv)
 
           waypoint.propeller_mass = guidance_point(6);
 
-          waypoint.time = 0.5*(2*current_fsm.time_now + 30) - 0.5*(30)*cos(3.14159*(2*i+1)/(2*N_POINT));
+          waypoint.time = 0.5*(2*current_fsm.time_now + HORIZON_LENGTH) - 0.5*(HORIZON_LENGTH)*cos(3.14159*(2*i+1)/(2*N_POINT));
 
           waypoint_pub.publish(waypoint);
 				}
