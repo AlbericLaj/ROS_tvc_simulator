@@ -88,7 +88,6 @@ tvc_simulator::Waypoint target_point;
 
 // Global variable with last received rocket state
 tvc_simulator::State current_state;
-Eigen::Matrix<double, 14, 1> init_cond; // Used for MPC init
 
 // Global variable with last requested fsm
 tvc_simulator::FSM current_fsm;
@@ -153,7 +152,6 @@ public:
     Eigen::DiagonalMatrix<scalar_t, 14> Q{1.0, 1.0, 5e4,    0.2, 0.2, 5e4,   500, 500, 500, 500,  100, 100, 100,    0};
     Eigen::DiagonalMatrix<scalar_t, 4> R{5e2, 5e2, 0, 5e2};
     Eigen::DiagonalMatrix<scalar_t, 14> QN{1.0, 1.0, 5e4,   0.2, 0.2, 5e4,    500, 500, 500, 500,   100, 100, 100,    0};
-
 
     Eigen::Matrix<scalar_t, 14,1> xs{0.0, 0.0, 0.0,   0.0, 0.0, 0.0,   0.0, 0.0, 0.0,1.0,    0.0, 0.0, 0.0,   6.0};
     Eigen::Matrix<scalar_t, 4,1> us{0.0, 0.0, 0, 0.0};
@@ -445,7 +443,7 @@ int main(int argc, char **argv)
   mpc_t::state_t ubx; 
   
   lbx << -inf, -inf, 0,   -inf, -inf, 0-eps,   -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf,  0-eps;
-  ubx << inf,   inf, inf,  inf,  inf, 330+eps,  0.183+eps,  0.183+eps,  0.183+eps,  1+eps,    inf,  inf,  inf,  3.1+eps;
+  ubx << inf,   inf, inf,  inf,  inf, 330+eps,  0.183+eps,  0.183+eps,  0.183+eps,  1+eps,    inf,  inf,  inf,  10+eps;
   
   //lbx << -inf, -inf, -inf,   -inf, -inf, -inf,   -inf, -inf, -inf, -inf,   -inf, -inf, -inf,     -inf;
   //ubx << inf,  inf, inf,     inf,  inf, inf,    inf,  inf,  inf,  inf,     inf,  inf,  inf,      inf;
@@ -483,6 +481,7 @@ int main(int argc, char **argv)
                             0, 0, 0, 1, 
                             0, 0, 0,
                             target_point.propeller_mass;
+        std::cout << "Time: "<< srv_waypoint.request.target_time << " ,target: " << mpc.ocp().xs.transpose() << "\n";
 
     }
 
@@ -518,7 +517,7 @@ int main(int argc, char **argv)
 			//std::cout << mpc.solution_x_reshaped() << "\n";
 			
 			Eigen::Matrix<double, 4,1> input = convertControl_SI(control_MPC);
-			ROS_INFO("Fx: %f, Fy: %f, Fz: %f, Mx: %f \n",  input[0], input[1], input[2], input[3]);
+			//ROS_INFO("Fx: %f, Fy: %f, Fz: %f, Mx: %f \n",  input[0], input[1], input[2], input[3]);
 
 			// -------------------------------------------------------------------------------------------------------------------------
 

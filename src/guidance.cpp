@@ -13,9 +13,6 @@
 #include <string>
 #include <vector>
 
-
-#define N_POINT 10 // Number of collocation points
-
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
 #include "polynomials/splines.hpp"
@@ -23,8 +20,10 @@
 #include "solvers/sqp_base.hpp"
 #include "solvers/box_admm.hpp"
 #include "solvers/admm.hpp"
+#include "solvers/osqp_interface.hpp"
 
 #include "utils/helpers.hpp"
+#include "control/mpc_wrapper.hpp"
 
 #include <iomanip>
 #include <iostream>
@@ -72,21 +71,6 @@ class Rocket
 
 };
 
-// Simple affine function as trajectory
-void affine_guidance(Rocket rocket);
-
-// Global variable with last requested fsm
-tvc_simulator::FSM current_fsm;
-
-// Global variable with last received rocket state
-tvc_simulator::State current_state;
-Eigen::Matrix<double, 14, 1> init_cond; // Used for MPC init
-
-// Global variable with array of waypoints = trajectory
-tvc_simulator::Waypoint trajectory[N_POINT];
-
-
-
 
 
 
@@ -110,6 +94,8 @@ time_point get_time()
 #define NUM_SEG    2
 #define NUM_EXP    1
 
+#define N_POINT POLY_ORDER*NUM_SEG // Number of collocation points
+
 /** benchmark the new collocation class */
 using Polynomial = polympc::Chebyshev<POLY_ORDER, polympc::GAUSS_LOBATTO, double>;
 using Approximation = polympc::Spline<Polynomial, NUM_SEG>;
@@ -121,28 +107,16 @@ class guidance_ocp : public ContinuousOCP<guidance_ocp, Approximation, SPARSE>
 {
 public:
     ~guidance_ocp() = default;
-    guidance_ocp()
-    {
-        Q.setZero();
-        R.setZero();
-        Q.diagonal() << 1.0, 1.0, 15, 0.2, 0.2, 0.5, 2.0;
-        R.diagonal() << 0.1, 0.1, 0.3;
-        P.setIdentity();
-        P.diagonal() << 1.0, 1.0, 100, 0.2, 0.2, 0.5, 5.0;
-
-        xs << 0.0, 0.0, 2000.0, 0.0, 0.0, 0.0, 0.0;
-        us << 0.0, 0.0, 5*40*9.81;
-    }
 
     static constexpr double t_start = 0;
     static constexpr double t_stop  = 30.0;
 
-    Eigen::Matrix<scalar_t, 7,7> Q;
-    Eigen::Matrix<scalar_t, 3,3> R;
-    Eigen::Matrix<scalar_t, 7,7> P;
+    Eigen::DiagonalMatrix<scalar_t, 7> Q{1.0, 1.0, 15, 0.2, 0.2, 0.5, 2.0};
+    Eigen::DiagonalMatrix<scalar_t, 3> R{0.1, 0.1, 0.3};
+    Eigen::DiagonalMatrix<scalar_t, 7> QN{1.0, 1.0, 100, 0.2, 0.2, 0.5, 5.0};
 
-    Eigen::Matrix<scalar_t, 7,1> xs;
-    Eigen::Matrix<scalar_t, 3,1> us;
+    Eigen::Matrix<scalar_t, 7,1> xs{0.0, 0.0, 2000.0, 0.0, 0.0, 0.0, 0.0};
+    Eigen::Matrix<scalar_t, 3,1> us{0.0, 0.0, 5*40*9.81};
 
     template<typename T>
     inline void dynamics_impl(const Eigen::Ref<const state_t<T>> x, const Eigen::Ref<const control_t<T>> u,
@@ -210,8 +184,14 @@ public:
                                    const Eigen::Ref<const parameter_t<T>> p, const Eigen::Ref<const static_parameter_t> d,
                                    const scalar_t &t, T &lagrange) noexcept
     {
-        lagrange = (x - xs.template cast<T>()).dot(Q.template cast<T>() * (x - xs.template cast<T>())) +
-                   (u - us.template cast<T>()).dot(R.template cast<T>() * (u - us.template cast<T>()));
+        Eigen::Matrix<T,7,7> Qm = Q.toDenseMatrix().template cast<T>();
+        Eigen::Matrix<T,3,3> Rm = R.toDenseMatrix().template cast<T>();
+        
+        Eigen::Matrix<T,7,1> x_error = x - xs.template cast<T>();
+        Eigen::Matrix<T,3,1> u_error = u - us.template cast<T>();
+        
+
+        lagrange = x_error.dot(Qm * x_error) + u_error.dot(Rm * u_error);
     }
 
     template<typename T>
@@ -219,9 +199,13 @@ public:
                                 const Eigen::Ref<const parameter_t<T>> p, const Eigen::Ref<const static_parameter_t> d,
                                 const scalar_t &t, T &mayer) noexcept
     {
-        mayer = (x - xs.template cast<T>()).dot(P.template cast<T>() * (x - xs.template cast<T>()));
-    }
+        Eigen::Matrix<T,7,7> Qm = QN.toDenseMatrix().template cast<T>();
+        
+        Eigen::Matrix<T,7,1> x_error = x - xs.template cast<T>();
+                
+        mayer = x_error.dot(Qm * x_error);    }
 };
+
 
 
 
@@ -238,6 +222,38 @@ public:
     using typename Base::scalar_t;
     using typename Base::nlp_variable_t;
     using typename Base::nlp_hessian_t;
+
+    EIGEN_STRONG_INLINE Problem& get_problem() noexcept { return this->problem; }
+
+    /** change Hessian regularization to non-default*/
+    EIGEN_STRONG_INLINE void hessian_regularisation_dense_impl(Eigen::Ref<nlp_hessian_t> lag_hessian) noexcept
+    { //Three methods: adding a constant identity matrix, estimating eigen values with Greshgoring circles, Eigen Value Decomposition        
+      const int n = this->m_H.rows();                
+      
+      /**Regularize by the estimation of the minimum negative eigen value--does not work with inexact Hessian update(matrix is already PSD)*/
+      scalar_t aii, ri;
+      for (int i = 0; i < n; i++)
+      {
+        aii = lag_hessian(i,i);
+        ri  = (lag_hessian.col(i).cwiseAbs()).sum() - abs(aii); // The hessian is symmetric, Greshgorin discs from rows or columns are equal
+        if (aii - ri <= 0) {lag_hessian(i,i) += (ri - aii) + scalar_t(0.01);} //All Greshgorin discs are in the positive half               
+        }
+    }
+    EIGEN_STRONG_INLINE void hessian_regularisation_sparse_impl(nlp_hessian_t& lag_hessian) noexcept
+    {//Three methods: adding a constant identity matrix, estimating eigen values with Gershgorin circles, Eigen Value Decomposition
+        const int n = this->m_H.rows(); //132=m_H.toDense().rows()        
+        
+        /**Regularize by the estimation of the minimum negative eigen value*/
+        scalar_t aii, ri;
+        for (int i = 0; i < n; i++)
+        {
+            aii = lag_hessian.coeffRef(i, i);
+            ri = (lag_hessian.col(i).cwiseAbs()).sum() - abs(aii); // The hessian is symmetric, Greshgorin discs from rows or columns are equal            
+            if (aii - ri <= 0)
+                lag_hessian.coeffRef(i, i) += (ri - aii) + 0.001;//All Gershgorin discs are in the positive half
+        }
+    }
+
 
     /** change step size selection algorithm */
     scalar_t step_size_selection_impl(const Ref<const nlp_variable_t>& p) noexcept
@@ -306,10 +322,21 @@ public:
 
 
 
+// Global variables
+using admm = boxADMM<guidance_ocp::VAR_SIZE, guidance_ocp::NUM_EQ, guidance_ocp::scalar_t,
+                guidance_ocp::MATRIXFMT, linear_solver_traits<guidance_ocp::MATRIXFMT>::default_solver>;
 
+using osqp_solver_t = polympc::OSQP<guidance_ocp::VAR_SIZE, guidance_ocp::NUM_EQ, guidance_ocp::scalar_t>;
 
+// Creates solver
+using mpc_t = MPC<guidance_ocp, MySolver, admm>;
+mpc_t mpc;
 
+// Global variable with last requested fsm
+tvc_simulator::FSM current_fsm;
 
+// Global variable with last received rocket state
+tvc_simulator::State current_state;
 
 // Callback function to store last received state
 void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
@@ -317,68 +344,34 @@ void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
 	current_state.pose = rocket_state->pose;
   current_state.twist = rocket_state->twist;
   current_state.propeller_mass = rocket_state->propeller_mass;
-
-	init_cond << rocket_state->pose.position.x, rocket_state->pose.position.y, rocket_state->pose.position.z,
-								rocket_state->twist.linear.x, rocket_state->twist.linear.y, rocket_state->twist.linear.z,
-								rocket_state->pose.orientation.w, rocket_state->pose.orientation.x, rocket_state->pose.orientation.y, rocket_state->pose.orientation.z, 
-								rocket_state->twist.angular.x, rocket_state->twist.angular.y, rocket_state->twist.angular.z,
-								rocket_state->propeller_mass;
 }
 
 // Service function: send back waypoint at requested time
-// Current version is a very crude linear interpolation from the Npoints stored as trajectory
 bool sendWaypoint(tvc_simulator::GetWaypoint::Request &req, tvc_simulator::GetWaypoint::Response &res)
 {
-  // Find closest point in time compared to requested time
-  int i = 0;
-  for(i = 0; i<N_POINT; i++)
-  {
-    if(trajectory[i].time > req.target_time)
-    {
-      break;
-    }
-  }
-  int prev_point = i-1;
+  Eigen::Matrix<double, 7, 1> next_waypoint; next_waypoint =  mpc.solution_x_at((float)(req.target_time-current_fsm.time_now)); 
   
-  // If requested time lies inside array of points:
-  if (prev_point >= 0 && prev_point < N_POINT -1)
-  {  
-    // How close requested time is to previous or next point. Is between 0 and 1
-    float ratio = ((req.target_time - trajectory[prev_point].time)/(trajectory[prev_point+1].time - trajectory[prev_point].time));
+  res.target_point.position.x = next_waypoint(0);
+  res.target_point.position.y = next_waypoint(1);
+  res.target_point.position.z = next_waypoint(2);
 
-    res.target_point.position.x = trajectory[prev_point].position.x +  ratio* (trajectory[prev_point+1].position.x - trajectory[prev_point].position.x);
+  res.target_point.speed.x = next_waypoint(3);
+  res.target_point.speed.y = next_waypoint(4);
+  res.target_point.speed.z = next_waypoint(5);
 
-    res.target_point.position.y = trajectory[prev_point].position.y +  ratio* (trajectory[prev_point+1].position.y - trajectory[prev_point].position.y);
-
-    res.target_point.position.z = trajectory[prev_point].position.z +  ratio* (trajectory[prev_point+1].position.z - trajectory[prev_point].position.z);
-
-
-    res.target_point.speed.x = trajectory[prev_point].speed.x +  ratio* (trajectory[prev_point+1].speed.x - trajectory[prev_point].speed.x);
-
-    res.target_point.speed.y = trajectory[prev_point].speed.y +  ratio* (trajectory[prev_point+1].speed.y - trajectory[prev_point].speed.y);
-
-    res.target_point.speed.z = trajectory[prev_point].speed.z +  ratio* (trajectory[prev_point+1].speed.z - trajectory[prev_point].speed.z);
-
-    res.target_point.propeller_mass = trajectory[prev_point].propeller_mass +  ratio* (trajectory[prev_point+1].propeller_mass - trajectory[prev_point].propeller_mass);
-
-  }
-  // If asked for a time before first point, give first point
-  else if (prev_point <0)
-  {
-    res.target_point = trajectory[1];
-  }
-  // If asked for a time after first point, give last point
-  else
-  {
-    res.target_point = trajectory[N_POINT -1];
-  }
+  res.target_point.propeller_mass = next_waypoint(6);
 
   res.target_point.time = req.target_time;
-
-	//std::cout << res.target_point << "\n--------------------------\n";
 	
 	return true;
 }
+
+
+
+
+
+
+
 
 
 
@@ -402,13 +395,53 @@ int main(int argc, char **argv)
 	// Subscribe to state message from simulation
   ros::Subscriber rocket_state_sub = n.subscribe("rocket_state", 100, rocket_stateCallback);
 	
-
 	// Initialize fsm
 	current_fsm.time_now = 0;
 	current_fsm.state_machine = "Idle";
 
   // Initialize rocket class with useful parameters
   Rocket rocket(n);
+
+	// Init MPC ----------------------------------------------------------------------------------------------------------------------
+	
+  mpc.settings().max_iter = 10;
+  mpc.settings().line_search_max_iter = 10;
+  //mpc.m_solver.settings().max_iter = 1000;
+  //mpc.m_solver.settings().scaling = 10;
+
+
+  // Input constraints
+  const double inf = std::numeric_limits<double>::infinity();
+  mpc_t::control_t lbu; 
+  mpc_t::control_t ubu; 
+
+  lbu << -200.0, -200.0, 0.0; // lower bound on control
+	ubu << 200.0, 200.0, 2000.0; // lower bound on control
+  
+  //lbu << -inf, -inf, -inf;
+  //ubu <<  inf,  inf,  inf;
+  mpc.control_bounds(lbu, ubu);
+
+
+  // State constraints
+  const double eps = 1e-1;
+  mpc_t::state_t lbx; 
+  mpc_t::state_t ubx; 
+  
+  lbx << -inf, -inf, 0,   -inf, -inf, 0-eps,   0-eps;
+  ubx << inf,   inf, inf,  inf,  inf, 330+eps, 10+eps;
+  
+  //lbx << -inf, -inf, -inf,   -inf, -inf, -inf,   -inf, -inf, -inf, -inf,   -inf, -inf, -inf,     -inf;
+  //ubx << inf,  inf, inf,     inf,  inf, inf,    inf,  inf,  inf,  inf,     inf,  inf,  inf,      inf;
+  mpc.state_bounds(lbx, ubx);
+  
+
+  // Initial state
+  mpc_t::state_t x0;
+  x0 << 0, 0, 0,
+        0, 0, 0,
+        5;
+  mpc.x_guess(x0.replicate(7,1));	
 	
   // Thread to compute guidance. Duration defines interval time in seconds
   ros::Timer guidance_thread = n.createTimer(ros::Duration(0.5),
@@ -428,121 +461,48 @@ int main(int argc, char **argv)
 
 			else if (current_fsm.state_machine.compare("Launch") == 0)
 			{
-        //affine_guidance(rocket);
-				MPC_guidance();
+        x0 <<   current_state.pose.position.x, current_state.pose.position.y, current_state.pose.position.z,
+                current_state.twist.linear.x, current_state.twist.linear.y, current_state.twist.linear.z,
+                current_state.propeller_mass;
+
+        mpc.initial_conditions(x0);
+        mpc.x_guess(x0.replicate(7,1));	
+
+        // Solve problem and save solution
+        double time_now = ros::Time::now().toSec();
+        mpc.solve();
+        ROS_INFO("T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
+
 				int i;
 				for(i=0; i<N_POINT; i++)
 				{
-            waypoint_pub.publish(trajectory[i]);
+          Eigen::Matrix<double, 7, 1> guidance_point; guidance_point =  mpc.solution_x_at(i);
+          tvc_simulator::Waypoint waypoint;
+  
+          waypoint.position.x = guidance_point(0);
+          waypoint.position.y = guidance_point(1);
+          waypoint.position.z = guidance_point(2);
+
+          waypoint.speed.x = guidance_point(3);
+          waypoint.speed.y = guidance_point(4);
+          waypoint.speed.z = guidance_point(5);
+
+          waypoint.propeller_mass = guidance_point(6);
+
+          waypoint.time = 0.5*(2*current_fsm.time_now + 30) - 0.5*(30)*cos(3.14159*(2*i+1)/(2*N_POINT));
+
+          waypoint_pub.publish(waypoint);
 				}
 
 			}
 
       else if (current_fsm.state_machine.compare("Coast") == 0)
 		  {
-        //affine_guidance(rocket);
-				MPC_guidance();
-				int i;
-				for(i=0; i<N_POINT; i++)
-				{
-            waypoint_pub.publish(trajectory[i]);
-				}
       }
-      // ---------------------------------------------------------
 		
   });
 
 	// Automatic callback of service and publisher from here
 	ros::spin();
-
-}
-
-// Creates very basic trajectory to reach desired points at apogee using affine functions
-void affine_guidance(Rocket rocket)
-{
-  // Define affine parameters for position trajectory
-  float tf = 30;
-  float dT = tf - current_fsm.time_now;
-  float a_x = (rocket.target_apogee[0] - current_state.pose.position.x)/dT;
-  float a_y = (rocket.target_apogee[1] - current_state.pose.position.y)/dT;
-  float a_z = (rocket.target_apogee[2] - current_state.pose.position.z)/dT;
-
-  float b_x = rocket.target_apogee[0] - a_x*tf;
-  float b_y = rocket.target_apogee[1] - a_y*tf;
-  float b_z = rocket.target_apogee[2] - a_z*tf;
-
-  // Fill the trajectory points' position
-  int i = 0;
-  for(i = 0; i<N_POINT; i++)
-  {
-    trajectory[i].time = current_fsm.time_now + i*dT/(N_POINT-1);
-
-    trajectory[i].position.x = a_x*trajectory[i].time + b_x;
-    trajectory[i].position.y = a_y*trajectory[i].time + b_y;
-    trajectory[i].position.z = a_z*trajectory[i].time + b_z;
-
-  }
-}
-
-void MPC_guidance()
-{
-
-  using admm = boxADMM<guidance_ocp::VAR_SIZE, guidance_ocp::NUM_EQ, guidance_ocp::scalar_t,
-                 guidance_ocp::MATRIXFMT, linear_solver_traits<guidance_ocp::MATRIXFMT>::default_solver>;
-
-  MySolver<guidance_ocp, admm> solver_guidance;
-
-	solver_guidance.settings().max_iter = 10;
-	solver_guidance.settings().line_search_max_iter = 10;
-
-  // Input constraints
-	Eigen::Matrix<double, 3, 1> lbu, ubu;
-	lbu << -200.0, -200.0, 0.0;
-	ubu << 200.0, 200.0, 2000.0;
-	
-	// State constraints
-  const double inf = std::numeric_limits<double>::infinity();
-  const double eps = 1e-4;
-  Eigen::Matrix<double, 7, 1> lbx, ubx;
-  lbx << -inf, -inf, 0,   -inf, -inf, 0-eps,   0-eps;
-  ubx << inf,   inf, inf,  inf,  inf, 330+eps, 3.1+eps;
-  solver_guidance.upper_bound_x().head(77) = ubx.replicate(11,1);
-  solver_guidance.lower_bound_x().head(77) = lbx.replicate(11,1);
-  
-  // Init state
-	solver_guidance.upper_bound_x().segment(70, 7) = init_cond;
-	solver_guidance.lower_bound_x().segment(70, 7) = init_cond;
-
-	solver_guidance.primal_solution().head<77>() = init_cond.replicate(11, 1);
-
-	solver_guidance.upper_bound_x().tail(33) = ubu.replicate(11,1);
-	solver_guidance.lower_bound_x().tail(33) = lbu.replicate(11,1);
-
-	// Solve problem and save solution
-	double time_now = ros::Time::now().toSec();
-	solver_guidance.solve();
-	//ROS_INFO("Solver duration: %f\n",  ros::Time::now().toSec()-time_now);
-
-	Eigen::Matrix<double, 7, 11> trajectory_MPC; trajectory_MPC << Eigen::Map<Eigen::Matrix<double, 7, 11>>(solver_guidance.primal_solution().head(77).data(), 7, 11);
-
-  // Fill the trajectory points' position
-  int i = 0;
-  for(i = 0; i<N_POINT; i++)
-  {
-    trajectory[i].time = 0.5*(2*current_fsm.time_now + 30) - 0.5*(30)*cos(3.14159*(2*i+1)/(2*N_POINT));
-
-    trajectory[i].position.x = trajectory_MPC(0, trajectory_MPC.cols()-1 - i);
-    trajectory[i].position.y = trajectory_MPC(1, trajectory_MPC.cols()-1 - i);
-    trajectory[i].position.z = trajectory_MPC(2, trajectory_MPC.cols()-1 - i);
-
-    trajectory[i].speed.x = trajectory_MPC(3, trajectory_MPC.cols()-1 - i);
-    trajectory[i].speed.y = trajectory_MPC(4, trajectory_MPC.cols()-1 - i);
-    trajectory[i].speed.z = trajectory_MPC(5, trajectory_MPC.cols()-1 - i);
-
-    trajectory[i].propeller_mass = trajectory_MPC(6, trajectory_MPC.cols()-1 - i);
-
-  }
-
-	//std::cout << trajectory[0] << "\n";
 
 }

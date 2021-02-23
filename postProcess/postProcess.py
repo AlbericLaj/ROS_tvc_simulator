@@ -17,7 +17,7 @@ import time
 import rosbag
 
 tStart = -1
-tEnd = 10
+tEnd = 30
 
 position = np.zeros((1,3))
 speed = np.zeros((1,3))
@@ -74,7 +74,6 @@ for topic, msg, t in bag.read_messages(topics=['/waypoint_pub']):
    
 bag.close()
 
-
 prop_mass = prop_mass[1:]
 speed = speed[1:]
 omega = omega[1:]
@@ -113,14 +112,12 @@ target_speedZ = np.reshape(target_speedZ, (-1, 10))
 target_prop_mass = np.reshape(target_prop_mass, (-1, 10))
 time_target = np.reshape(time_target, (-1, 10))
 
-
 select_target = np.logical_and(time_target>tStart, time_target <tEnd)
 
-time_target = time_target[select_target]
-target_prop_mass = target_prop_mass[select_target]
-target_positionZ = target_positionZ[select_target]
-target_speedZ = target_speedZ[select_target]
-
+# time_target = time_target[select_target]
+# target_prop_mass = target_prop_mass[select_target]
+# target_positionZ = target_positionZ[select_target]
+# target_speedZ = target_speedZ[select_target]
 
 
 fig, axe = plt.subplots(3,4, figsize=(15,10))
@@ -131,15 +128,16 @@ axe[0][0].legend(l, ('X position [m]', 'Y position [m]'))
 
 
 l = axe[0][1].plot(time_state[select], position[:, 2][select], label = 'Z position [m]', linewidth=4)
-#l = axe[0][1].plot(time_target.T, target_positionZ.T)
+l = axe[0][1].plot(time_target.T, target_positionZ.T)
 axe[0][1].legend()
 
 l = axe[1][0].plot(time_state[select], speed[:, 0:2][select])
 axe[1][0].legend(l, ('X speed [m/s]', 'Y speed [m]'))
 
 l = axe[1][1].plot(time_state[select], speed[:, 2][select],  label = 'Z speed [m/s]')
-#l = axe[1][1].plot(time_target.T, target_speedZ.T)
+l = axe[1][1].plot(time_target.T[:,0], target_speedZ.T[:,0])
 axe[1][1].legend()
+
 
 l = axe[0][2].plot(time_state[select], attitude[:, 1:3][select]) 
 #axe[0][2].axhline(y=-180, color='r', linestyle='--')

@@ -250,7 +250,7 @@ target_link_libraries(control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRAR
 add_dependencies(control ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(guidance src/guidance.cpp)
-target_link_libraries(guidance ${catkin_LIBRARIES})
+target_link_libraries(guidance Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
 
 add_executable(data_fusion src/data_fusion.cpp)
 target_link_libraries(data_fusion ${catkin_LIBRARIES})
