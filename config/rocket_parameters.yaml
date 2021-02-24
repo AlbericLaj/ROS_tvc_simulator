@@ -35,7 +35,7 @@ maxThrust:
 minThrust: 
   - -50
   - -50
-  - 0
+  - 100
 minTorque: -50
 maxTorque: 50
 Cd:

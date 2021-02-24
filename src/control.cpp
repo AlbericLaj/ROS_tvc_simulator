@@ -14,7 +14,7 @@
 #include <sstream>
 #include <string>
 
-#define CONTROL_HORIZON 3 // In seconds
+#define CONTROL_HORIZON 5 // In seconds
 
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
@@ -110,9 +110,6 @@ class Rocket
 
 Rocket rocket;
 
-// Global variable with next waypoint to be followed
-tvc_simulator::Waypoint target_point;
-
 // Global variable with last received rocket state
 tvc_simulator::State current_state;
 
@@ -130,7 +127,7 @@ void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
 
 Eigen::Matrix<double, 4,1> convertControl_SI(const Eigen::Matrix<double, 4,1>& u)
 {
-  Eigen::Matrix<double, 4,1> input; input << rocket.maxThrust[0]*u(0), rocket.maxThrust[1]*u(1), rocket.maxThrust[2]/2*(u(2)+1), rocket.maxTorque*u(3);
+  Eigen::Matrix<double, 4,1> input; input << rocket.maxThrust[0]*u(0), rocket.maxThrust[1]*u(1), 0.5*((rocket.maxThrust[2]-rocket.minThrust[2])*u(2) + rocket.maxThrust[2]+rocket.minThrust[2] ), rocket.maxTorque*u(3);
   return input;
 }
 
@@ -175,9 +172,9 @@ public:
     static constexpr double t_start = 0.0;
     static constexpr double t_stop  = CONTROL_HORIZON;
 
-    Eigen::DiagonalMatrix<scalar_t, 14> Q{1.0, 1.0, 5e4,    0.2, 0.2, 5e4,   500, 500, 500, 500,  100, 100, 100,    0};
+    Eigen::DiagonalMatrix<scalar_t, 14> Q{1.0, 1.0, 5e4,    0.2, 0.2, 0,   500, 500, 500, 500,  100, 100, 100,    0};
     Eigen::DiagonalMatrix<scalar_t, 4> R{5e2, 5e2, 0, 5e2};
-    Eigen::DiagonalMatrix<scalar_t, 14> QN{1.0, 1.0, 5e4,   0.2, 0.2, 5e4,    500, 500, 500, 500,   100, 100, 100,    0};
+    Eigen::DiagonalMatrix<scalar_t, 14> QN{1.0, 1.0, 5e4,   0.2, 0.2, 0,    500, 500, 500, 500,   100, 100, 100,    0};
 
     Eigen::Matrix<scalar_t, 14,1> xs;
     Eigen::Matrix<scalar_t, 4,1> us{0.0, 0.0, 0, 0.0};
@@ -187,7 +184,7 @@ public:
                               const Eigen::Ref<const parameter_t<T>> p, const Eigen::Ref<const static_parameter_t> &d,
                               const T &t, Eigen::Ref<state_t<T>> xdot) const noexcept
     {
-        Eigen::Matrix<T, 4,1> input; input << rocket.maxThrust[0]*u(0), rocket.maxThrust[1]*u(1), rocket.maxThrust[2]/2*(u(2)+1), rocket.maxTorque*u(3);
+        Eigen::Matrix<T, 4,1> input; input << rocket.maxThrust[0]*u(0), rocket.maxThrust[1]*u(1), 0.5*((rocket.maxThrust[2]-rocket.minThrust[2])*u(2) + rocket.maxThrust[2]+rocket.minThrust[2] ), rocket.maxTorque*u(3);
 
         // -------------- Simulation parameters -------------- -------------
         T g0 = (T)9.81;                             // Earth gravity in [m/s^2]
@@ -493,19 +490,27 @@ int main(int argc, char **argv)
     {
       current_fsm = srv_fsm.response.fsm;
     }
-    // Get next waypoint objective
-    srv_waypoint.request.target_time = current_fsm.time_now + CONTROL_HORIZON;
-    if(client_waypoint.call(srv_waypoint))
-    {
-        target_point = srv_waypoint.response.target_point;
-        mpc.ocp().xs <<  target_point.position.x/1000, target_point.position.y/1000, target_point.position.z/1000,
-                            target_point.speed.x/1000, target_point.speed.y/1000, target_point.speed.z/1000,
-                            0, 0, 0, 1, 
-                            0, 0, 0,
-                            target_point.propeller_mass;
-        //std::cout << "Time: "<< srv_waypoint.request.target_time << " ,target: " << mpc.ocp().xs.transpose() << "\n";
 
+    mpc_t::traj_state_t x_init;
+    mpc_t::state_t target_point;
+
+    for(int i = 0; i<mpc.ocp().NUM_NODES; i++)
+    {
+      srv_waypoint.request.target_time = current_fsm.time_now + mpc.time_grid(i);
+      if(client_waypoint.call(srv_waypoint))
+      {
+        
+        target_point<<  srv_waypoint.response.target_point.position.x/1000, srv_waypoint.response.target_point.position.y/1000, srv_waypoint.response.target_point.position.z/1000,
+                        srv_waypoint.response.target_point.speed.x/1000, srv_waypoint.response.target_point.speed.y/1000, srv_waypoint.response.target_point.speed.z/1000,
+                        current_state.pose.orientation.x, current_state.pose.orientation.y, current_state.pose.orientation.z,current_state.pose.orientation.w, 
+							          current_state.twist.angular.x, current_state.twist.angular.y, current_state.twist.angular.z,
+                        srv_waypoint.response.target_point.propeller_mass;
+
+        x_init.segment(i*14, 14) = target_point;
+      }
     }
+    mpc.x_guess(x_init);
+    mpc.ocp().xs <<  target_point;
 
     // State machine ------------------------------------------
 		if (current_fsm.state_machine.compare("Idle") == 0)
@@ -522,7 +527,6 @@ int main(int argc, char **argv)
 							current_state.propeller_mass;
 
       mpc.initial_conditions(x0);
-      mpc.x_guess(x0.replicate(14,1));	
 
 		  // Solve problem and save solution
 			double time_now = ros::Time::now().toSec();
@@ -543,7 +547,7 @@ int main(int argc, char **argv)
 
 
       // Simple P controller. Thrust in z is used to reach apogee, Thrust in x and y is used to keep vertical orientation
-			thrust_force.z = (target_point.position.z - current_state.pose.position.z)*100;
+			//thrust_force.z = (target_point.position.z - current_state.pose.position.z)*100;
 
       thrust_force.x = -current_state.pose.orientation.x*900/rocket.CM_average;
       thrust_force.y = -current_state.pose.orientation.y*900/rocket.CM_average;

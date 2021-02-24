@@ -384,7 +384,7 @@ int main(int argc, char **argv)
 
 	// Init MPC ----------------------------------------------------------------------------------------------------------------------
 	
-  mpc.settings().max_iter = 5;
+  mpc.settings().max_iter = 10;
   mpc.settings().line_search_max_iter = 10;
   //mpc.m_solver.settings().max_iter = 1000;
   //mpc.m_solver.settings().scaling = 10;
@@ -400,7 +400,7 @@ int main(int argc, char **argv)
   
   //lbu << -inf, -inf, -inf;
   //ubu <<  inf,  inf,  inf;
-  mpc.control_bounds(lbu, ubu);
+  mpc.control_bounds(lbu, ubu); 
 
 
   // State constraints

@@ -136,8 +136,8 @@ if __name__ == '__main__':
 	rospy.init_node('integrator', anonymous=True)
 
 	# Init global variable
-	current_fsm.time_now = 0;
-	current_fsm.state_machine = "Idle";
+	current_fsm.time_now = 0
+	current_fsm.state_machine = "Idle"
 
 	# Subscribe to control law
 	rospy.Subscriber("control_pub", Control, control_callback)
