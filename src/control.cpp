@@ -14,7 +14,7 @@
 #include <sstream>
 #include <string>
 
-#define CONTROL_HORIZON 4 // In seconds
+#define CONTROL_HORIZON 3 // In seconds
 
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
@@ -42,18 +42,30 @@ class Rocket
     float dry_mass;
     float propellant_mass;
     float Isp;
+    float minTorque;
+    float maxTorque;
+
     std::vector<float> maxThrust{0, 0, 0};
     std::vector<float> minThrust{0, 0, 0};
     float dry_CM;
+    float propellant_CM;
+
+    float CM_average;
 
     std::vector<float> target_apogee = {0, 0, 0};
     std::vector<float> Cd = {0, 0, 0};
     std::vector<float> surface = {0, 0, 0};
+    std::vector<float> drag_coeff = {0, 0, 0};
+    
+    std::vector<float> I{0, 0, 0};
+    std::vector<float> J_inv{0, 0, 0};
 
   //Rocket();
 
     void init(ros::NodeHandle n)
     {
+      n.getParam("/rocket/minTorque", minTorque);
+      n.getParam("/rocket/maxTorque", maxTorque);
       n.getParam("/rocket/maxThrust", maxThrust);
       n.getParam("/rocket/minThrust", minThrust);
       n.getParam("/rocket/Isp", Isp);
@@ -62,7 +74,10 @@ class Rocket
       n.getParam("/rocket/propellant_mass", propellant_mass);
       
       n.getParam("/rocket/Cd", Cd);
+      n.getParam("/rocket/dry_I", I);
+
       n.getParam("/rocket/dry_CM", dry_CM);
+      n.getParam("/rocket/propellant_CM", propellant_CM);
 
       n.getParam("/environment/apogee", target_apogee);
 
@@ -77,6 +92,18 @@ class Rocket
       surface[0] = diameter[1]*length[nStage-1];
       surface[1] = surface[0];
       surface[2] = diameter[1]*diameter[1]/4 * 3.14159;
+
+      float rho_air = 1.225;
+      drag_coeff[0] = 0.5*rho_air*surface[0]*Cd[0];
+      drag_coeff[1] = 0.5*rho_air*surface[1]*Cd[1];
+      drag_coeff[2] = 0.5*rho_air*surface[2]*Cd[2];
+
+      CM_average = 0.5*dry_CM + 0.5*(dry_CM*dry_mass + propellant_CM*propellant_mass)/(dry_mass+propellant_mass); // From tip of nosecone
+      CM_average = length[nStage-1]-CM_average; // From aft of rocket = distance for torque
+
+      J_inv[0] = CM_average/I[0];
+      J_inv[1] = CM_average/I[1];
+      J_inv[2] = 1/I[2];
     }
 
 };
@@ -103,8 +130,7 @@ void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
 
 Eigen::Matrix<double, 4,1> convertControl_SI(const Eigen::Matrix<double, 4,1>& u)
 {
-  Eigen::Matrix<double, 4,1> input; input << 50*u(0), 50*u(1), 1000*(u(2)+1), 50*u(3);
-
+  Eigen::Matrix<double, 4,1> input; input << rocket.maxThrust[0]*u(0), rocket.maxThrust[1]*u(1), rocket.maxThrust[2]/2*(u(2)+1), rocket.maxTorque*u(3);
   return input;
 }
 
@@ -153,7 +179,7 @@ public:
     Eigen::DiagonalMatrix<scalar_t, 4> R{5e2, 5e2, 0, 5e2};
     Eigen::DiagonalMatrix<scalar_t, 14> QN{1.0, 1.0, 5e4,   0.2, 0.2, 5e4,    500, 500, 500, 500,   100, 100, 100,    0};
 
-    Eigen::Matrix<scalar_t, 14,1> xs{0.0, 0.0, 0.0,   0.0, 0.0, 0.0,   0.0, 0.0, 0.0,1.0,    0.0, 0.0, 0.0,   6.0};
+    Eigen::Matrix<scalar_t, 14,1> xs;
     Eigen::Matrix<scalar_t, 4,1> us{0.0, 0.0, 0, 0.0};
 
     template<typename T>
@@ -161,26 +187,22 @@ public:
                               const Eigen::Ref<const parameter_t<T>> p, const Eigen::Ref<const static_parameter_t> &d,
                               const T &t, Eigen::Ref<state_t<T>> xdot) const noexcept
     {
-        Eigen::Matrix<T, 4,1> input; input << 50*u(0), 50*u(1),1000*(u(2)+1) , 50*u(3);
-        
-        // -------------- Constant Rocket parameters ----------------------------------------
-        Eigen::Matrix<T, 3, 1> J_inv; J_inv << (T)(1.97/47), (T)(1.97/47), (T)(1.0/2);
-        
-        T Isp = (T)213;                             // Specific Impulse in [s] 
+        Eigen::Matrix<T, 4,1> input; input << rocket.maxThrust[0]*u(0), rocket.maxThrust[1]*u(1), rocket.maxThrust[2]/2*(u(2)+1), rocket.maxTorque*u(3);
 
-        // -------------- Constant external parameters ------------------------------------
+        // -------------- Simulation parameters -------------- -------------
         T g0 = (T)9.81;                             // Earth gravity in [m/s^2]
 
+        Eigen::Matrix<T, 3, 1> J_inv; J_inv << (T)rocket.J_inv[0], (T)rocket.J_inv[1], (T)rocket.J_inv[2]; // Cemter of mass divided by axes inertia
 
         // -------------- Simulation variables -----------------------------
-        T mass = (T)40 + x(13);                  // Instantaneous mass of the rocket in [kg]
+        T mass = (T)rocket.dry_mass + x(6);                  // Instantaneous mass of the rocket in [kg]
 
         // Orientation of the rocket with quaternion
         Eigen::Quaternion<T> attitude( x(9), x(6), x(7), x(8));
         Eigen::Matrix<T, 3, 3> rot_matrix = attitude.toRotationMatrix();
 
         // Z drag --> Big approximation: speed in Z is basically the same between world and rocket
-        T drag = (T)(1e6*0.5*0.3*0.0186*1.225*x(5)*x(5)); 
+        T drag = (T)(1e6*rocket.drag_coeff[2]*x(5)*x(5)); 
         
         // Force in body frame (drag + thrust) in [N]
         Eigen::Matrix<T, 3, 1> rocket_force; rocket_force << (T)input(0), (T)input(1), (T)(input(2) - drag);
@@ -213,7 +235,7 @@ public:
         xdot.segment(10, 3) = rot_matrix*(rocket_torque.cwiseProduct(J_inv));
 
         // Mass variation is proportional to thrust
-        xdot(13) = -input(2)/(Isp*g0);
+        xdot(13) = -input(2)/((T)rocket.Isp*g0);
     }
 
     template<typename T>
@@ -442,8 +464,8 @@ int main(int argc, char **argv)
   mpc_t::state_t lbx; 
   mpc_t::state_t ubx; 
   
-  lbx << -inf, -inf, 0,   -inf, -inf, 0-eps,   -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf,  0-eps;
-  ubx << inf,   inf, inf,  inf,  inf, 330+eps,  0.183+eps,  0.183+eps,  0.183+eps,  1+eps,    inf,  inf,  inf,  10+eps;
+  lbx << -inf, -inf, 0,     -inf, -inf, 0-eps,     -0.183-eps, -0.183-eps, -0.183-eps, -1-eps,   -inf, -inf, -inf,     0-eps;
+  ubx <<  inf,  inf, inf,    inf,  inf, 330+eps,    0.183+eps,  0.183+eps,  0.183+eps,  1+eps,    inf,  inf,  inf,     rocket.propellant_mass+eps;
   
   //lbx << -inf, -inf, -inf,   -inf, -inf, -inf,   -inf, -inf, -inf, -inf,   -inf, -inf, -inf,     -inf;
   //ubx << inf,  inf, inf,     inf,  inf, inf,    inf,  inf,  inf,  inf,     inf,  inf,  inf,      inf;
@@ -456,7 +478,7 @@ int main(int argc, char **argv)
         0, 0, 0,
         0, 0, 0, 1, 
         0, 0, 0,
-        3;
+        rocket.propellant_mass;
   mpc.x_guess(x0.replicate(14,1));	
 		  
   // --------------------------------------------------------------------------------------------------------------------
@@ -523,8 +545,8 @@ int main(int argc, char **argv)
       // Simple P controller. Thrust in z is used to reach apogee, Thrust in x and y is used to keep vertical orientation
 			thrust_force.z = (target_point.position.z - current_state.pose.position.z)*100;
 
-      thrust_force.x = -current_state.pose.orientation.x*900/rocket.dry_CM;
-      thrust_force.y = -current_state.pose.orientation.y*900/rocket.dry_CM;
+      thrust_force.x = -current_state.pose.orientation.x*900/rocket.CM_average;
+      thrust_force.y = -current_state.pose.orientation.y*900/rocket.CM_average;
 
 			thrust_force.x = input[0];
 			thrust_force.y = input[1];
@@ -534,14 +556,14 @@ int main(int argc, char **argv)
       if(thrust_force.z > rocket.maxThrust[2]) thrust_force.z = rocket.maxThrust[2];
       if(thrust_force.z < rocket.minThrust[2]) thrust_force.z = rocket.minThrust[2];
       
-      if(thrust_force.x > 100) thrust_force.x = 100;
-      if(thrust_force.x < -100) thrust_force.x = -100;
-      if(thrust_force.y > 100) thrust_force.y = 100;
-      if(thrust_force.y < -100) thrust_force.y = -100;
+      if(thrust_force.x > rocket.maxThrust[0]) thrust_force.x = rocket.maxThrust[0];
+      if(thrust_force.x < rocket.minThrust[0]) thrust_force.x = rocket.minThrust[0];
+      if(thrust_force.y > rocket.maxThrust[1]) thrust_force.y = rocket.maxThrust[1];
+      if(thrust_force.y < rocket.minThrust[1]) thrust_force.y = rocket.maxThrust[1];
 
       // Torque in X and Y is defined by thrust in X and Y. Torque in Z is free variable
-      thrust_torque.x = thrust_force.x*1.97; 
-      thrust_torque.y = thrust_force.y*1.97;
+      thrust_torque.x = thrust_force.x*rocket.CM_average; 
+      thrust_torque.y = thrust_force.y*rocket.CM_average;
 			thrust_torque.z = input[3];
 
 			control_law.force = thrust_force;

@@ -18,8 +18,8 @@ tvc_simulator::State current_rocket_state;
 void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
 {
 	current_rocket_state.pose = rocket_state->pose;
-  current_rocket_state.twist = rocket_state->twist;
-  current_rocket_state.propeller_mass = rocket_state->propeller_mass;
+  	current_rocket_state.twist = rocket_state->twist;
+ 	current_rocket_state.propeller_mass = rocket_state->propeller_mass;
 }
 
 // Service function: send back fsm (time + state machine)
@@ -41,17 +41,15 @@ int main(int argc, char **argv)
 {
 
 	// Init ROS time keeper node
-  ros::init(argc, argv, "time_keeper");
-  ros::NodeHandle n;
+	ros::init(argc, argv, "time_keeper");
+	ros::NodeHandle n;
 
 	// Initialize fsm
 	current_fsm.time_now = 0;
 	current_fsm.state_machine = "Launch";
 
-  // Initialize rocket state
-  current_rocket_state.propeller_mass = 10; // To stay in launch mode at first iteration
-
-	time_zero = ros::Time::now().toSec();
+	// Initialize rocket state
+	current_rocket_state.propeller_mass = 10; // To stay in launch mode at first iteration
 
 	// Create timer service
 	ros::ServiceServer timer_service = n.advertiseService("getFSM", sendFSM);
@@ -60,40 +58,43 @@ int main(int argc, char **argv)
 	ros::Publisher timer_pub = n.advertise<tvc_simulator::FSM>("fsm_pub", 10);
 
 	// Subscribe to state message
-  ros::Subscriber rocket_state_sub = n.subscribe("rocket_state", 100, rocket_stateCallback);
+	ros::Subscriber rocket_state_sub = n.subscribe("rocket_state", 100, rocket_stateCallback);
 
-  ros::Timer FSM_thread = n.createTimer(ros::Duration(0.01),
-  [&](const ros::TimerEvent&) 
+	timer_pub.publish(current_fsm);
+	time_zero = ros::Time::now().toSec();
+
+	ros::Timer FSM_thread = n.createTimer(ros::Duration(0.01),
+	[&](const ros::TimerEvent&) 
 	{
 		// Update current time
 		current_fsm.time_now = ros::Time::now().toSec() - time_zero;
 
-    // Update FSM
-  	if (current_fsm.state_machine.compare("Idle") == 0)
+	// Update FSM
+		if (current_fsm.state_machine.compare("Idle") == 0)
 		{
 			// Do nothing
 		}
 
 		else if (current_fsm.state_machine.compare("Launch") == 0)
 		{
-      // End of burn -> no more thrust
-      if(current_rocket_state.propeller_mass <0) 
-      {
-        current_fsm.state_machine = "Coast";
-      }
+			// End of burn -> no more thrust
+			if(current_rocket_state.propeller_mass <0) 
+			{
+				current_fsm.state_machine = "Coast";
+			}
 
-    }
-    
-    else if (current_fsm.state_machine.compare("Coast") == 0)
+		}
+
+		else if (current_fsm.state_machine.compare("Coast") == 0)
 		{
-      // Do nothing for now
-    }
+		// Do nothing for now
+		}
 
-    // Publish time + state machine    
+		// Publish time + state machine    
 		timer_pub.publish(current_fsm);
-	  ROS_INFO("Sent info: State = %s, time = %f", current_fsm.state_machine.c_str(), current_fsm.time_now);
+		ROS_INFO("Sent info: State = %s, time = %f", current_fsm.state_machine.c_str(), current_fsm.time_now);
 
-  });
+	});
 
 	// Automatic callback of service and publisher from here
 	ros::spin();

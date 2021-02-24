@@ -379,7 +379,7 @@ int main(int argc, char **argv)
 	current_fsm.time_now = 0;
 	current_fsm.state_machine = "Idle";
 
-    // Initialize rocket class with useful parameters
+  // Initialize rocket class with useful parameters
   rocket.init(n);
 
 	// Init MPC ----------------------------------------------------------------------------------------------------------------------
@@ -454,8 +454,8 @@ int main(int argc, char **argv)
         double time_now = ros::Time::now().toSec();
         mpc.solve();
         ROS_INFO("Gdc T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
-        //std::cout << mpc.solution_u_at(0) << "\n";
-
+        
+        //std::cout << mpc.solution_x_at(0).transpose() << "\n";
 				int i;
 				for(i=0; i< mpc.ocp().NUM_NODES; i++)
 				{
