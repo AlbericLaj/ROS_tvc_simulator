@@ -50,7 +50,7 @@ void targetTrajCallback(const tvc_simulator::Trajectory::ConstPtr &traj) {
 
 int marker_id_count = 0;
 
-void init_marker(visualization_msgs::Marker &marker, std::string ns, std::string frame_id = "world") {
+void init_marker(visualization_msgs::Marker &marker, std::string ns, float r, float g, float b, float a = 1.0, std::string frame_id = "world") {
     // set the frame of reference
     marker.header.frame_id = frame_id;
 
@@ -61,7 +61,11 @@ void init_marker(visualization_msgs::Marker &marker, std::string ns, std::string
     marker.ns = ns;
     marker.id = marker_id_count;
     marker_id_count++;
-    ROS_INFO("%i", marker_id_count);
+
+    marker.color.r = r;
+    marker.color.g = g;
+    marker.color.b = b;
+    marker.color.a = a;
 }
 
 
@@ -117,10 +121,10 @@ int main(int argc, char **argv) {
 
     visualization_msgs::Marker rocket_marker, thrust_vector, mpc_horizon, target_trajectory;
 
-    init_marker(rocket_marker, "rocket marker");
-    init_marker(thrust_vector, "thrust vector");
-    init_marker(mpc_horizon, "mpc horizon");
-    init_marker(target_trajectory, "target trajectory");
+    init_marker(rocket_marker, "rocket marker", 0.75, 0.75, 0.75);
+    init_marker(thrust_vector, "thrust vector", 1, 0.5, 0);
+    init_marker(mpc_horizon, "mpc horizon", 0.1, 0.3, 0.7, 0.4);
+    init_marker(target_trajectory, "target trajectory", 0.15, 0.5, 0.25, 0.4);
 
     //setup rocket marker
     rocket_marker.type = visualization_msgs::Marker::MESH_RESOURCE;
@@ -130,12 +134,6 @@ int main(int argc, char **argv) {
     rocket_marker.scale.x = 1e-3;
     rocket_marker.scale.y = 1e-3;
     rocket_marker.scale.z = 1e-3;
-
-    // Set the color -- be sure to set alpha to something non-zero!
-    rocket_marker.color.r = 0.0f;
-    rocket_marker.color.g = 0.0f;
-    rocket_marker.color.b = 1.0f;
-    rocket_marker.color.a = 1.0;
 
     //thrust vector
     const float shaft_diameter = 1;
@@ -149,22 +147,14 @@ int main(int argc, char **argv) {
     thrust_vector.scale.x = shaft_diameter;
     thrust_vector.scale.y = arrow_diameter;
     thrust_vector.scale.z = head_length;
-    thrust_vector.color.r = 1.0;
-    thrust_vector.color.a = 1.0;
 
     //MPC horizon
     const float line_width = 0.6;
     mpc_horizon.type = visualization_msgs::Marker::LINE_STRIP;
-    mpc_horizon.color.r = 1.0;
-    mpc_horizon.color.b = 1.0;
-    mpc_horizon.color.a = 1.0;
-
     mpc_horizon.scale.x = line_width;
 
-
+    //target trajectory
     target_trajectory.type = visualization_msgs::Marker::LINE_STRIP;
-    target_trajectory.color.g = 1.0;
-    target_trajectory.color.a = 1.0;
     target_trajectory.scale.x = line_width;
 
 
