@@ -107,10 +107,12 @@ select_force = np.logical_and(time_force>tStart, time_force <tEnd)
 target_positionZ = target_position[:, 2]
 target_speedZ = target_speed[:, 2]
 
-target_positionZ = np.reshape(target_positionZ, (-1, 10))
-target_speedZ = np.reshape(target_speedZ, (-1, 10))
-target_prop_mass = np.reshape(target_prop_mass, (-1, 10))
-time_target = np.reshape(time_target, (-1, 10))
+n_node_guidance = 11
+
+target_positionZ = np.reshape(target_positionZ, (-1, n_node_guidance))
+target_speedZ = np.reshape(target_speedZ, (-1, n_node_guidance))
+target_prop_mass = np.reshape(target_prop_mass, (-1, n_node_guidance))
+time_target = np.reshape(time_target, (-1, n_node_guidance))
 
 select_target = np.logical_and(time_target>tStart, time_target <tEnd)
 

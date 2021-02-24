@@ -129,7 +129,6 @@ public:
                               const Eigen::Ref<const parameter_t<T>> p, const Eigen::Ref<const static_parameter_t> &d,
                               const T &t, Eigen::Ref<state_t<T>> xdot) const noexcept
     {
-        std::cout << x << "\n" << u << "\n\n";
         // -------------- Simulation variables -----------------------------
         T mass = (T)rocket.dry_mass + x(6);                   // Instantaneous mass of the rocekt in [kg]
         T g0 = (T)9.81;                             // Earth gravity in [m/s^2]
@@ -385,7 +384,7 @@ int main(int argc, char **argv)
 
 	// Init MPC ----------------------------------------------------------------------------------------------------------------------
 	
-  mpc.settings().max_iter = 10;
+  mpc.settings().max_iter = 5;
   mpc.settings().line_search_max_iter = 10;
   //mpc.m_solver.settings().max_iter = 1000;
   //mpc.m_solver.settings().scaling = 10;
@@ -450,16 +449,15 @@ int main(int argc, char **argv)
                 current_state.propeller_mass;
 
         mpc.initial_conditions(x0);
-        mpc.x_guess(x0.replicate(7,1));	
 
         // Solve problem and save solution
         double time_now = ros::Time::now().toSec();
         mpc.solve();
         ROS_INFO("Gdc T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
-        std::cout << mpc.solution_u_at(0) << "\n";
+        //std::cout << mpc.solution_u_at(0) << "\n";
 
 				int i;
-				for(i=0; i<N_POINT; i++)
+				for(i=0; i< mpc.ocp().NUM_NODES; i++)
 				{
           Eigen::Matrix<double, 7, 1> guidance_point; guidance_point =  mpc.solution_x_at(i);
           tvc_simulator::Waypoint waypoint;
@@ -474,7 +472,7 @@ int main(int argc, char **argv)
 
           waypoint.propeller_mass = guidance_point(6);
 
-          waypoint.time = 0.5*(2*current_fsm.time_now + HORIZON_LENGTH) - 0.5*(HORIZON_LENGTH)*cos(3.14159*(2*i+1)/(2*N_POINT));
+          waypoint.time = mpc.time_grid(i) + current_fsm.time_now ;
 
           waypoint_pub.publish(waypoint);
 				}

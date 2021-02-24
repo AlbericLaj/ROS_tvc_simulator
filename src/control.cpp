@@ -14,7 +14,7 @@
 #include <sstream>
 #include <string>
 
-#define CONTROL_HORIZON 3 // In seconds
+#define CONTROL_HORIZON 4 // In seconds
 
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
@@ -507,8 +507,6 @@ int main(int argc, char **argv)
 		  mpc.solve();
 			ROS_INFO("Ctr T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
 
-		 
-
 		  // Get state and control solution
 
 			Eigen::Matrix<double, 4, 1> control_MPC;
@@ -548,6 +546,8 @@ int main(int argc, char **argv)
 
 			control_law.force = thrust_force;
 			control_law.torque = thrust_torque;
+
+      //std::cout << control_law << "\n";
 		}
 
 		else if (current_fsm.state_machine.compare("Coast") == 0)
