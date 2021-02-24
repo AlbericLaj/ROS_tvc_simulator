@@ -3,6 +3,7 @@
 #include "tvc_simulator/FSM.h"
 #include "tvc_simulator/State.h"
 #include "tvc_simulator/Waypoint.h"
+#include "tvc_simulator/Trajectory.h"
 
 #include "tvc_simulator/GetFSM.h"
 #include "tvc_simulator/GetWaypoint.h"
@@ -399,6 +400,8 @@ int main(int argc, char **argv)
 	// Create waypoint publisher
 	ros::Publisher waypoint_pub = n.advertise<tvc_simulator::Waypoint>("waypoint_pub", 10);
 
+	ros::Publisher target_trajectory_pub = n.advertise<tvc_simulator::Trajectory>("target_trajectory", 10);
+
 	// Subscribe to state message from simulation
   ros::Subscriber rocket_state_sub = n.subscribe("rocket_state", 100, rocket_stateCallback);
 	
@@ -436,7 +439,15 @@ int main(int argc, char **argv)
             waypoint_pub.publish(trajectory[i]);
 				}
 
-			}
+
+                tvc_simulator::Trajectory trajectory_msg;
+                for(int i = 0; i<N_POINT;i++){
+                    trajectory_msg.trajectory.push_back(trajectory[i].position);
+                }
+
+                target_trajectory_pub.publish(trajectory_msg);
+
+            }
 
       else if (current_fsm.state_machine.compare("Coast") == 0)
 		  {

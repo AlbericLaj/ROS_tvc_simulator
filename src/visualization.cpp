@@ -2,6 +2,7 @@
 
 #include "tvc_simulator/State.h"
 #include "tvc_simulator/Control.h"
+#include "tvc_simulator/Trajectory.h"
 
 #include <visualization_msgs/Marker.h>
 
@@ -13,6 +14,8 @@
 #include <tf/transform_datatypes.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_broadcaster.h>
+
+#include "nav_msgs/Path.h"
 
 // global variable with last received rocket state
 tvc_simulator::State current_state;
@@ -31,6 +34,37 @@ void controlCallback(const tvc_simulator::Control::ConstPtr &control) {
     current_control.force = control->force;
 }
 
+// global variable with the MPC trajectory
+tvc_simulator::Trajectory current_mpc_horizon;
+
+void mpcHorizonCallback(const tvc_simulator::Trajectory::ConstPtr &traj) {
+    current_mpc_horizon = *traj;
+}
+
+// global variable with the MPC trajectory
+tvc_simulator::Trajectory current_target_trajectory;
+
+void targetTrajCallback(const tvc_simulator::Trajectory::ConstPtr &traj) {
+    current_target_trajectory = *traj;
+}
+
+int marker_id_count = 0;
+
+void init_marker(visualization_msgs::Marker &marker, std::string ns, std::string frame_id = "world") {
+    // set the frame of reference
+    marker.header.frame_id = frame_id;
+
+    // Set the body action.  Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
+    marker.action = visualization_msgs::Marker::ADD;
+    // Set the namespace and id for this body.  This serves to create a unique ID
+    // Any body sent with the same namespace and id will overwrite the old one
+    marker.ns = ns;
+    marker.id = marker_id_count;
+    marker_id_count++;
+    ROS_INFO("%i", marker_id_count);
+}
+
+
 int main(int argc, char **argv) {
     // Init ROS time keeper node
     ros::init(argc, argv, "visualization");
@@ -42,20 +76,26 @@ int main(int argc, char **argv) {
     current_state.pose.orientation.z = 0;
     current_state.pose.orientation.w = 1;
 
-    //initialize control
+    //Initialize control
     current_control.force.x = 0;
     current_control.force.y = 0;
     current_control.force.z = 0;
+
+    //Initialize trajectory
+    for (int i = 0; i < 11; i++) {
+        geometry_msgs::Point point;
+        point.x = 0;
+        point.y = 0;
+        point.z = 0;
+        current_mpc_horizon.trajectory.push_back(point);
+    }
 
 
     // Subscribe to state message
     ros::Subscriber rocket_state_sub = n.subscribe("rocket_state", 1000, rocket_stateCallback);
     ros::Subscriber control_sub = n.subscribe("control_pub", 1000, controlCallback);
-
-    // Create RViz publisher (10Hz)
-    ros::Rate r(10);
-    ros::Publisher viz_pub = n.advertise<visualization_msgs::Marker>("rocket_visualization", 5);
-
+    ros::Subscriber mpc_horizon_sub = n.subscribe("mpc_horizon", 1000, mpcHorizonCallback);
+    ros::Subscriber target_trajectory_sub = n.subscribe("target_trajectory", 1000, targetTrajCallback);
 
     // Moving frame
     tf2_ros::TransformBroadcaster tfb;
@@ -75,18 +115,14 @@ int main(int argc, char **argv) {
     transformStamped.transform.rotation.z = q.z();
     transformStamped.transform.rotation.w = q.w();
 
+    visualization_msgs::Marker rocket_marker, thrust_vector, mpc_horizon, target_trajectory;
 
-    visualization_msgs::Marker rocket_marker, thrust_vector;
+    init_marker(rocket_marker, "rocket marker");
+    init_marker(thrust_vector, "thrust vector");
+    init_marker(mpc_horizon, "mpc horizon");
+    init_marker(target_trajectory, "target trajectory");
 
-    rocket_marker.header.frame_id = "world";
-    // Set the body action.  Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
-    rocket_marker.action = visualization_msgs::Marker::ADD;
-    // Set the namespace and id for this body.  This serves to create a unique ID
-    // Any body sent with the same namespace and id will overwrite the old one
-    rocket_marker.ns = "rocket_shape";
-    rocket_marker.id = 1;
-
-    // Set our rocket shape type to be a mesh
+    //setup rocket marker
     rocket_marker.type = visualization_msgs::Marker::MESH_RESOURCE;
     rocket_marker.mesh_resource = "package://tvc_simulator/rviz/Bellalui_1.stl";
 
@@ -109,10 +145,6 @@ int main(int argc, char **argv) {
     //TODO use real offset and correct rocket scaling
     const float offset = 20;
 
-    thrust_vector.header.frame_id = "world";
-    thrust_vector.action = visualization_msgs::Marker::ADD;
-    thrust_vector.ns = "thrust_vector";
-    thrust_vector.id = 2;
     thrust_vector.type = visualization_msgs::Marker::ARROW;
     thrust_vector.scale.x = shaft_diameter;
     thrust_vector.scale.y = arrow_diameter;
@@ -120,8 +152,25 @@ int main(int argc, char **argv) {
     thrust_vector.color.r = 1.0;
     thrust_vector.color.a = 1.0;
 
-    //TODO remove
-    rocket_marker.pose.orientation = current_state.pose.orientation;
+    //MPC horizon
+    const float line_width = 0.6;
+    mpc_horizon.type = visualization_msgs::Marker::LINE_STRIP;
+    mpc_horizon.color.r = 1.0;
+    mpc_horizon.color.b = 1.0;
+    mpc_horizon.color.a = 1.0;
+
+    mpc_horizon.scale.x = line_width;
+
+
+    target_trajectory.type = visualization_msgs::Marker::LINE_STRIP;
+    target_trajectory.color.g = 1.0;
+    target_trajectory.color.a = 1.0;
+    target_trajectory.scale.x = line_width;
+
+
+    // Create RViz publisher (10Hz)
+    ros::Rate r(10);
+    ros::Publisher viz_pub = n.advertise<visualization_msgs::Marker>("rocket_visualization", marker_id_count + 1);
 
     while (ros::ok()) {
         // Set the pose of the marker.  This is a full 6DOF pose relative to the frame/time specified in the header
@@ -145,7 +194,8 @@ int main(int argc, char **argv) {
         tf2::Quaternion q_rot;
         tf2::convert(current_state.pose.orientation, q_rot);
 
-        tf2::Quaternion thrust_vector_body(-current_control.force.x, -current_control.force.y, -current_control.force.z, 0);
+        tf2::Quaternion thrust_vector_body(-current_control.force.x, -current_control.force.y, -current_control.force.z,
+                                           0);
         tf2::Quaternion thrust_vector_inertial = q_rot * thrust_vector_body * q_rot.inverse();
 
         tf2::Quaternion minus_z_body(0, 0, -1, 0);
@@ -166,6 +216,33 @@ int main(int argc, char **argv) {
         thrust_vector.header.stamp = ros::Time::now();
         thrust_vector.lifetime = ros::Duration();
 
+        //MPC horizon
+        mpc_horizon.header.stamp = ros::Time::now();
+        mpc_horizon.lifetime = ros::Duration();
+
+        mpc_horizon.points.clear();
+        for (auto &traj_point : current_mpc_horizon.trajectory) {
+            geometry_msgs::Point point;
+            point.x = traj_point.x;
+            point.y = traj_point.y;
+            point.z = traj_point.z;
+            mpc_horizon.points.push_back(point);
+        }
+
+
+        //target trajectory
+        target_trajectory.header.stamp = ros::Time::now();
+        target_trajectory.lifetime = ros::Duration();
+
+        target_trajectory.points.clear();
+        for (auto &traj_point : current_target_trajectory.trajectory) {
+            geometry_msgs::Point point;
+            point.x = traj_point.x;
+            point.y = traj_point.y;
+            point.z = traj_point.z;
+            target_trajectory.points.push_back(point);
+        }
+
         // Publish the marker
         while (viz_pub.getNumSubscribers() < 1) {
             if (!ros::ok()) {
@@ -179,6 +256,8 @@ int main(int argc, char **argv) {
         tfb.sendTransform(transformStamped);
         viz_pub.publish(rocket_marker);
         viz_pub.publish(thrust_vector);
+        viz_pub.publish(mpc_horizon);
+        viz_pub.publish(target_trajectory);
         ros::spinOnce();
 
         r.sleep();

@@ -3,6 +3,7 @@
 #include "tvc_simulator/FSM.h"
 #include "tvc_simulator/State.h"
 #include "tvc_simulator/Waypoint.h"
+#include "tvc_simulator/Trajectory.h"
 
 #include "tvc_simulator/Control.h"
 #include "geometry_msgs/Vector3.h"
@@ -374,6 +375,9 @@ int main(int argc, char **argv)
 	// Create control publisher
 	ros::Publisher control_pub = n.advertise<tvc_simulator::Control>("control_pub", 10);
 
+    // Create path publisher
+    ros::Publisher MPC_horizon_pub = n.advertise<tvc_simulator::Trajectory>("mpc_horizon", 10);
+
 	// Subscribe to state message from simulation
   ros::Subscriber rocket_state_sub = n.subscribe("rocket_state", 100, rocket_stateCallback);
 
@@ -473,7 +477,7 @@ int main(int argc, char **argv)
 		  // Solve problem and save solution
 			double time_now = ros::Time::now().toSec();
 		  solver.solve();
-			ROS_INFO("T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), solver.info().status.value, solver.m_qp_solver.m_info.iter);
+//			ROS_INFO("T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), solver.info().status.value, solver.m_qp_solver.m_info.iter);
 
 		 
 
@@ -519,6 +523,19 @@ int main(int argc, char **argv)
 
 			control_law.force = thrust_force;
 			control_law.torque = thrust_torque;
+
+			tvc_simulator::Trajectory trajectory_msg;
+                for(int i = 0; i<11;i++){
+                    geometry_msgs::Point point;
+                    point.x = 1000*trajectory(0, i);
+                    point.y = 1000*trajectory(1, i);
+                    point.z = 1000*trajectory(2, i);
+                    trajectory_msg.trajectory.push_back(point);
+                }
+
+                MPC_horizon_pub.publish(trajectory_msg);
+
+
 		}
 
 		else if (current_fsm.state_machine.compare("Coast") == 0)
