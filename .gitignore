@@ -3,3 +3,6 @@
 .idea
 cmake-build-debug
 log.bag
+
+
+log/log.bag.active

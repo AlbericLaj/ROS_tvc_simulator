@@ -70,7 +70,7 @@ int main(int argc, char **argv)
   ros::Timer control_thread = n.createTimer(ros::Duration(0.060),
   [&](const ros::TimerEvent&) 
 	{
-		ROS_INFO("State: %s", current_fsm.state_machine.c_str());
+//		ROS_INFO("State: %s", current_fsm.state_machine.c_str());
 		// Rocket state X and input U:
 		static double X[14];
 		double U[4] = {current_control.force.x, current_control.force.y, current_control.force.z, current_control.torque.z};

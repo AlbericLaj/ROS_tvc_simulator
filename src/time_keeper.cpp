@@ -91,7 +91,7 @@ int main(int argc, char **argv)
 
     // Publish time + state machine    
 		timer_pub.publish(current_fsm);
-	  ROS_INFO("Sent info: State = %s, time = %f", current_fsm.state_machine.c_str(), current_fsm.time_now);
+//	  ROS_INFO("Sent info: State = %s, time = %f", current_fsm.state_machine.c_str(), current_fsm.time_now);
 
   });
 
