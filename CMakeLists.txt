@@ -14,18 +14,17 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror")
 set(CMAKE_VERBOSE_MAKEFILE “ON”)
 
 option(BUILD_RELEASE "Build release version w/o debugging symbols" ON)
-if(BUILD_RELEASE)
-  set(CMAKE_BUILD_TYPE "Release")
-else()
-  set(CMAKE_BUILD_TYPE "Debug")
-endif()
+if (BUILD_RELEASE)
+    set(CMAKE_BUILD_TYPE "Release")
+else ()
+    set(CMAKE_BUILD_TYPE "Debug")
+endif ()
 
 add_definitions(-DEIGEN_STACK_ALLOCATION_LIMIT=1000000) # 1 MB
 
 
-
 add_subdirectory(submodule/polympc)
-include_directories(submodule/polympc/src src)
+include_directories(submodule/polympc/src src src/prototypes/drone)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -34,17 +33,17 @@ include_directories(submodule/polympc/src src)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  rospy
-  roslib
-  std_msgs
-  message_generation
-  geometry_msgs
-	genmsg
-	visualization_msgs
+        roscpp
+        rospy
+        roslib
+        std_msgs
+        message_generation
+        geometry_msgs
+        genmsg
+        visualization_msgs
         tf2_ros
-	#polympc-ros
-)
+        #polympc-ros
+        )
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -79,22 +78,24 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
- add_message_files(
-   FILES
-	Control.msg
-	State.msg
-	FSM.msg
-  Waypoint.msg
-	Sensor.msg
-    Trajectory.msg
+add_message_files(
+        FILES
+        Control.msg
+        State.msg
+        FSM.msg
+        Waypoint.msg
+        Sensor.msg
+        Trajectory.msg
+        DroneControl.msg
+        DroneState.msg
 )
 
 ## Generate services in the 'srv' folder
- add_service_files(
-   FILES
-   GetFSM.srv
-   GetWaypoint.srv
- )
+add_service_files(
+        FILES
+        GetFSM.srv
+        GetWaypoint.srv
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -104,11 +105,11 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
- generate_messages(
-   DEPENDENCIES
-   std_msgs
-   geometry_msgs
-	 #visualization_msgs
+generate_messages(
+        DEPENDENCIES
+        std_msgs
+        geometry_msgs
+        #visualization_msgs
 )
 
 ################################################
@@ -141,10 +142,10 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES tvc_simulator
-  CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs #polympc-ros
-#  DEPENDS system_lib
+        #  INCLUDE_DIRS include
+        #  LIBRARIES tvc_simulator
+        CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs #polympc-ros
+        #  DEPENDS system_lib
 )
 
 ###########
@@ -154,8 +155,8 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
+        include
+        ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -197,11 +198,11 @@ include_directories(
 
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination
- catkin_install_python(PROGRAMS
-   scripts/integrator.py
-   scripts/disturbance.py
-   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
- )
+catkin_install_python(PROGRAMS
+        scripts/integrator.py
+        scripts/disturbance.py
+        DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+        )
 
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
@@ -252,10 +253,13 @@ add_executable(control src/control.cpp)
 target_link_libraries(control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
 add_dependencies(control ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
-
-add_executable(drone_control src/prototypes/drone_control.cpp)
+add_executable(drone_control src/prototypes/drone/drone_control.cpp)
 target_link_libraries(drone_control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
 add_dependencies(drone_control ${${PROJECT_NAME}_EXPORTED_TARGETS})
+
+add_executable(control_interface src/prototypes/drone/drone_interface.cpp)
+target_link_libraries(control_interface Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
+add_dependencies(control_interface ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(guidance src/guidance.cpp)
 target_link_libraries(guidance Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})

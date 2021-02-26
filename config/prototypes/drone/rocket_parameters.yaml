@@ -1,15 +1,16 @@
 # Rocket parameters
 stages: 4
+# negligible diameters -> neglect drag for the drone
 diameters:
+  - 1.0e-39
+  - 1.0e-40
+  - 1.0e-40
+  - 1.0e-40
+stage_z:
   - 0
-  - 0.2 
-  - 0.2 
+  - 0.1
   - 0.2
-stage_z: 
-  - 0 
-  - 0.1 
-  - 0.2 
-  - 0.5 
+  - 0.5
 fin_n: 3
 fin_top_offset: 0.25 
 fin_span: 0.1
@@ -18,7 +19,7 @@ fin_tip_chord: 0.1
 fin_sweep: 0.1
 fin_thickness: 0.004
 lug_n: 2
-lug_S: 5.7e-4 
+lug_S: 5.7e-4
 dry_mass: 1.7
 dry_CM: 0.1
 dry_I:

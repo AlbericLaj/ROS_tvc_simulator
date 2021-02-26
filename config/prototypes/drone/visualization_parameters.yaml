@@ -1,4 +1,6 @@
 # Visualization parameters
 stl_model: "drone_model.stl"
 stl_model_scale: 3.0e-3
+stl_alpha: 0.3
+thrust_vector_scaling: 0.1
 CM_to_thrust_distance: 0.4

@@ -121,7 +121,10 @@ int main(int argc, char **argv) {
 
     visualization_msgs::Marker rocket_marker, thrust_vector, mpc_horizon, target_trajectory;
 
-    init_marker(rocket_marker, "rocket marker", 0.75, 0.75, 0.75);
+    float stl_alpha;
+    n.getParam("/visualization/stl_alpha", stl_alpha);
+
+    init_marker(rocket_marker, "rocket marker", 0.75, 0.75, 0.75, stl_alpha);
     init_marker(thrust_vector, "thrust vector", 1, 0.5, 0);
     init_marker(mpc_horizon, "mpc horizon", 0.1, 0.3, 0.7, 0.4);
     init_marker(target_trajectory, "target trajectory", 0.15, 0.5, 0.25, 0.4);
@@ -143,8 +146,8 @@ int main(int argc, char **argv) {
     const float shaft_diameter = 0.1;
     const float arrow_diameter = 0.2;
     const float head_length = 0.2;
-    const float thrust_scaling = 0.001;
-    //TODO use real offset and correct rocket scaling
+    float thrust_scaling;
+    n.getParam("/visualization/thrust_vector_scaling", thrust_scaling);
     float offset;
     n.getParam("/visualization/CM_to_thrust_distance", offset);
 
