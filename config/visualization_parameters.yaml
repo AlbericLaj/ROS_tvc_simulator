@@ -1,0 +1,4 @@
+# Visualization parameters
+stl_model_scale: 1.0e-4
+stl_model: "Bellalui_1.stl"
+CM_to_thrust_distance: 1.97

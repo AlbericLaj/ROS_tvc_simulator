@@ -4,7 +4,10 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
+        - /Grid1
         - /Marker1/Status1
+        - /Axes1
+        - /Axes2
       Splitter Ratio: 0.4111776351928711
     Tree Height: 587
   - Class: rviz/Selection
@@ -34,7 +37,7 @@ Visualization Manager:
   Class: ""
   Displays:
     - Alpha: 0.5
-      Cell Size: 100
+      Cell Size: 10
       Class: rviz/Grid
       Color: 160; 160; 164
       Enabled: true
@@ -56,23 +59,24 @@ Visualization Manager:
       Marker Topic: /rocket_visualization
       Name: Marker
       Namespaces:
-        mpc_horizon: true
-        rocket_shape: true
-        thrust_vector: true
+        mpc horizon: true
+        rocket marker: true
+        target trajectory: true
+        thrust vector: true
       Queue Size: 100
       Value: true
     - Class: rviz/Axes
       Enabled: true
-      Length: 100
+      Length: 10
       Name: Axes
-      Radius: 0.20000000298023224
+      Radius: 0.10000000149011612
       Reference Frame: <Fixed Frame>
       Value: true
     - Class: rviz/Axes
       Enabled: true
-      Length: 3
+      Length: 0.30000001192092896
       Name: Axes
-      Radius: 0.30000001192092896
+      Radius: 0.05000000074505806
       Reference Frame: body_frame
       Value: true
   Enabled: true
@@ -103,25 +107,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 127.64734649658203
+      Distance: 8.582060813903809
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 2.672044277191162
-        Y: 2.1676454544067383
-        Z: 1.5708690881729126
+        X: 1.0614748001098633
+        Y: 1.8309627771377563
+        Z: 0.9959124326705933
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.13979722559452057
+      Pitch: 0.6197969913482666
       Target Frame: body_frame
       Value: Orbit (rviz)
-      Yaw: 1.200392723083496
+      Yaw: 1.3053927421569824
     Saved: ~
 Window Geometry:
   Displays:
