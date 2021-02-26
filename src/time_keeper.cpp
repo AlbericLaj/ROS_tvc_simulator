@@ -7,6 +7,7 @@
 #include <string>
 
 #include "tvc_simulator/GetFSM.h"
+#include "std_msgs/String.h"
 
 // global variable with time and state machine
 tvc_simulator::FSM current_fsm;
@@ -36,6 +37,13 @@ bool sendFSM(tvc_simulator::GetFSM::Request &req, tvc_simulator::GetFSM::Respons
 	return true;
 }
 
+void processCommand(const std_msgs::String &command){
+    current_fsm.state_machine = "Launch";
+    time_zero = ros::Time::now().toSec();
+    if(command.data.compare("Launch") == 0){
+        //TODO ?
+    }
+}
 
 int main(int argc, char **argv)
 {
@@ -44,14 +52,14 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "time_keeper");
   ros::NodeHandle n;
 
+
+    // Subscribe to commands
+    ros::Subscriber command_sub = n.subscribe("commands", 10, processCommand);
+
 	// Initialize fsm
 	current_fsm.time_now = 0;
-	current_fsm.state_machine = "Launch";
+	current_fsm.state_machine = "Idle";
 
-  // Initialize rocket state
-  current_rocket_state.propeller_mass = 10; // To stay in launch mode at first iteration
-
-	time_zero = ros::Time::now().toSec();
 
 	// Create timer service
 	ros::ServiceServer timer_service = n.advertiseService("getFSM", sendFSM);
@@ -77,7 +85,7 @@ int main(int argc, char **argv)
 		else if (current_fsm.state_machine.compare("Launch") == 0)
 		{
       // End of burn -> no more thrust
-      if(current_rocket_state.propeller_mass <0) 
+      if(current_rocket_state.propeller_mass <0)
       {
         current_fsm.state_machine = "Coast";
       }
