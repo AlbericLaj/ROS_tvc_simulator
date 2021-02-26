@@ -370,9 +370,7 @@ int main(int argc, char **argv)
 	// Create waypoint service
 	ros::ServiceServer waypoint_service = n.advertiseService("getWaypoint", sendWaypoint);
 	
-	// Create waypoint publisher
-	ros::Publisher waypoint_pub = n.advertise<tvc_simulator::Waypoint>("waypoint_pub", 10);
-
+	// Create waypoint trajectory publisher
 	ros::Publisher target_trajectory_pub = n.advertise<tvc_simulator::Trajectory>("target_trajectory", 10);
 
 	// Subscribe to state message from simulation
@@ -459,9 +457,10 @@ int main(int argc, char **argv)
         ROS_INFO("Gdc T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
         //std::cout << mpc.solution_u_at(0) << "\n";
 
-				int i;
-				for(i=0; i< mpc.ocp().NUM_NODES; i++)
-				{
+        // Send full optimal state as waypoint trajectory
+        tvc_simulator::Trajectory trajectory_msg;
+        for(int i=0; i< mpc.ocp().NUM_NODES; i++)
+        {
           Eigen::Matrix<double, 7, 1> guidance_point; guidance_point =  mpc.solution_x_at(i);
           tvc_simulator::Waypoint waypoint;
   
@@ -477,22 +476,12 @@ int main(int argc, char **argv)
 
           waypoint.time = mpc.time_grid(i) + current_fsm.time_now ;
 
-          waypoint_pub.publish(waypoint);
-				}
+          trajectory_msg.trajectory.push_back(waypoint);
+        }
 
+        target_trajectory_pub.publish(trajectory_msg);
 
-                tvc_simulator::Trajectory trajectory_msg;
-                for(int i=0; i< mpc.ocp().NUM_NODES; i++){
-                    geometry_msgs::Point point;
-                    point.x = mpc.solution_x_at(i)[0];
-                    point.y = mpc.solution_x_at(i)[1];
-                    point.z = mpc.solution_x_at(i)[2];
-                    trajectory_msg.trajectory.push_back(point);
-                }
-
-                target_trajectory_pub.publish(trajectory_msg);
-
-            }
+      }
 
       else if (current_fsm.state_machine.compare("Coast") == 0)
 		  {

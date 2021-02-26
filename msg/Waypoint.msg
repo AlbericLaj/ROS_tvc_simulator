@@ -3,3 +3,4 @@ geometry_msgs/Point position
 geometry_msgs/Vector3 speed
 float32 propeller_mass
 
+ 

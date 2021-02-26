@@ -553,17 +553,17 @@ int main(int argc, char **argv)
 
       //std::cout << control_law << "\n";
 
-
+      // Send optimal trajectory computed by control. Send only position for now
 			tvc_simulator::Trajectory trajectory_msg;
-                for(int i = 0; i<11;i++){
-                    geometry_msgs::Point point;
-                    point.x = 1000*mpc.solution_x_at(i)[0];
-                    point.y = 1000*mpc.solution_x_at(i)[1];
-                    point.z = 1000*mpc.solution_x_at(i)[2];
-                    trajectory_msg.trajectory.push_back(point);
-                }
+      for(int i = 0; i<mpc.ocp().NUM_NODES ;i++){
+          tvc_simulator::Waypoint point;
+          point.position.x = 1000*mpc.solution_x_at(i)[0];
+          point.position.y = 1000*mpc.solution_x_at(i)[1];
+          point.position.z = 1000*mpc.solution_x_at(i)[2];
+          trajectory_msg.trajectory.push_back(point);
+      }
 
-                MPC_horizon_pub.publish(trajectory_msg);
+      MPC_horizon_pub.publish(trajectory_msg);
 
 
 		}

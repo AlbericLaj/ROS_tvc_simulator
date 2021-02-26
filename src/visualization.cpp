@@ -2,6 +2,7 @@
 
 #include "tvc_simulator/State.h"
 #include "tvc_simulator/Control.h"
+#include "tvc_simulator/Waypoint.h"
 #include "tvc_simulator/Trajectory.h"
 
 #include <visualization_msgs/Marker.h>
@@ -87,11 +88,11 @@ int main(int argc, char **argv) {
 
     //Initialize trajectory
     for (int i = 0; i < 11; i++) {
-        geometry_msgs::Point point;
-        point.x = 0;
-        point.y = 0;
-        point.z = 0;
-        current_mpc_horizon.trajectory.push_back(point);
+        tvc_simulator::Waypoint waypoint;
+        waypoint.position.x = 0;
+        waypoint.position.y = 0;
+        waypoint.position.z = 0;
+        current_mpc_horizon.trajectory.push_back(waypoint);
     }
 
 
@@ -213,9 +214,9 @@ int main(int argc, char **argv) {
         mpc_horizon.points.clear();
         for (auto &traj_point : current_mpc_horizon.trajectory) {
             geometry_msgs::Point point;
-            point.x = traj_point.x;
-            point.y = traj_point.y;
-            point.z = traj_point.z;
+            point.x = traj_point.position.x;
+            point.y = traj_point.position.y;
+            point.z = traj_point.position.z;
             mpc_horizon.points.push_back(point);
         }
 
@@ -227,9 +228,9 @@ int main(int argc, char **argv) {
         target_trajectory.points.clear();
         for (auto &traj_point : current_target_trajectory.trajectory) {
             geometry_msgs::Point point;
-            point.x = traj_point.x;
-            point.y = traj_point.y;
-            point.z = traj_point.z;
+            point.x = traj_point.position.x;
+            point.y = traj_point.position.y;
+            point.z = traj_point.position.z;
             target_trajectory.points.push_back(point);
         }
 
