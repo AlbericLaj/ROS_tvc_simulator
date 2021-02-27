@@ -152,15 +152,15 @@
                 },
                 "topics": {
                   "type": "repr",
-                  "repr": "u''"
+                  "repr": "[u'/drone_control_pub/servo1', u'/drone_control_pub/servo2']"
                 },
                 "y_limits": {
                   "type": "repr",
-                  "repr": "[-13.628461914635928, 100.0]"
+                  "repr": "[-2.0, 2.0]"
                 },
                 "x_limits": {
                   "type": "repr",
-                  "repr": "[55.4475040435791, 75.4475040435791]"
+                  "repr": "[38.45439696311951, 58.45439696311951]"
                 }
               },
               "groups": {}
@@ -199,15 +199,15 @@
                 },
                 "topics": {
                   "type": "repr",
-                  "repr": "u''"
+                  "repr": "u'/drone_control_pub/torque'"
                 },
                 "y_limits": {
                   "type": "repr",
-                  "repr": "[-1.0, 100.0]"
+                  "repr": "[-4.0, 4.0]"
                 },
                 "x_limits": {
                   "type": "repr",
-                  "repr": "[0.0, 20.0]"
+                  "repr": "[38.49768090248108, 58.49768090248108]"
                 }
               },
               "groups": {}
@@ -246,15 +246,15 @@
                 },
                 "topics": {
                   "type": "repr",
-                  "repr": "[u'/rocket_state/twist/linear/x', u'/rocket_state/twist/linear/y']"
+                  "repr": "[u'/rocket_state/pose/orientation/y', u'/rocket_state/pose/orientation/x']"
                 },
                 "y_limits": {
                   "type": "repr",
-                  "repr": "[-27.50597271740024, 100.0]"
+                  "repr": "[-2.0, 2.0]"
                 },
                 "x_limits": {
                   "type": "repr",
-                  "repr": "[2.98020601272583, 22.98020601272583]"
+                  "repr": "[39.74932789802551, 59.74932789802551]"
                 }
               },
               "groups": {}
@@ -293,15 +293,15 @@
                 },
                 "topics": {
                   "type": "repr",
-                  "repr": "u''"
+                  "repr": "u'/drone_control_pub/thrust'"
                 },
                 "y_limits": {
                   "type": "repr",
-                  "repr": "[-1.0, 2000.2447333165412]"
+                  "repr": "[-1.0, 40.0]"
                 },
                 "x_limits": {
                   "type": "repr",
-                  "repr": "[55.750072956085205, 75.7500729560852]"
+                  "repr": "[38.750267028808594, 58.750267028808594]"
                 }
               },
               "groups": {}
@@ -340,15 +340,15 @@
                 },
                 "topics": {
                   "type": "repr",
-                  "repr": "u'/rocket_state/twist/linear/z'"
+                  "repr": "u'/rocket_state/pose/position/z'"
                 },
                 "y_limits": {
                   "type": "repr",
-                  "repr": "[-277.9084218895589, 255.80949828804296]"
+                  "repr": "[-1.0, 40.0]"
                 },
                 "x_limits": {
                   "type": "repr",
-                  "repr": "[1.951157808303833, 21.951157808303833]"
+                  "repr": "[0.0, 20.0]"
                 }
               },
               "groups": {}
@@ -387,15 +387,15 @@
                 },
                 "topics": {
                   "type": "repr",
-                  "repr": "u''"
+                  "repr": "u'/rocket_state/pose/orientation/z'"
                 },
                 "y_limits": {
                   "type": "repr",
-                  "repr": "[-1.0, 100.0]"
+                  "repr": "[-2.0, 2.0]"
                 },
                 "x_limits": {
                   "type": "repr",
-                  "repr": "[0.0, 20.0]"
+                  "repr": "[38.83171486854553, 58.83171486854553]"
                 }
               },
               "groups": {}

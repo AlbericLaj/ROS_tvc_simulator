@@ -17,7 +17,7 @@
   </group>
 ''
 
-<!--  <node name="control" pkg="tvc_simulator" type="drone_control" output ="screen"/>-->
+  <node name="control" pkg="tvc_simulator" type="drone_control" output ="screen"/>
   <node name="control_interface" pkg="tvc_simulator" type="control_interface" cwd = "node"/>
   <node name="guidance" pkg="tvc_simulator" type="guidance" output ="screen"  />
   <node name="integrator" pkg="tvc_simulator" type="integrator.py" cwd = "node" output ="screen"/>

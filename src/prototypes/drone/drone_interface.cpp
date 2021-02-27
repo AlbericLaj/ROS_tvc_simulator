@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
     control_pub = n.advertise<tvc_simulator::Control>("control_pub", 10);
 
     // Create control publisher
-    drone_state_pub = n.advertise<tvc_simulator::DroneState>("drone_state_pub", 10);
+    drone_state_pub = n.advertise<tvc_simulator::DroneState>("drone_state", 10);
 
     // Automatic callback of service and publisher from here
     ros::spin();

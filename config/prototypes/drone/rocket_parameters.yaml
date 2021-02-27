@@ -31,6 +31,8 @@ propellant_CM: 0.1
 Isp: 1000000
 maxThrust: 30
 minThrust: 0
+maxServo1Angle: 1
+maxServo2Angle: 1
 Cd:
   - 2
   - 2
