@@ -38,7 +38,7 @@ class Rocket:
   groung_temperature = 0
   
 
-  target_apogee = np.zeros(3);
+  target_apogee = np.zeros(3)
   Cd = np.zeros(3)
   surface = np.zeros(3)
   length = 0

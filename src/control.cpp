@@ -174,7 +174,7 @@ public:
     static constexpr double t_stop  = CONTROL_HORIZON;
 
     Eigen::DiagonalMatrix<scalar_t, 14> Q{1.0, 1.0, 5e4,    0.2, 0.2, 0,   500, 500, 500, 500,  100, 100, 100,    0};
-    Eigen::DiagonalMatrix<scalar_t, 4> R{5e2, 5e2, 0, 5e2};
+    Eigen::DiagonalMatrix<scalar_t, 4> R{5e2, 5e2, 1000, 5e2};
     Eigen::DiagonalMatrix<scalar_t, 14> QN{1.0, 1.0, 5e4,   0.2, 0.2, 0,    500, 500, 500, 500,   100, 100, 100,    0};
 
     Eigen::Matrix<scalar_t, 14,1> xs;
@@ -521,7 +521,11 @@ int main(int argc, char **argv)
     }
     mpc.u_guess(u_init);
     mpc.x_guess(x_init);
+
     mpc.ocp().xs <<  target_point; // last trajectory point is also our target
+    mpc.ocp().us << target_control;
+    // ROS_INFO(" ");
+    //std::cout << x_init.head(3).transpose() << "\n";
 
     // State machine ------------------------------------------
 		if (current_fsm.state_machine.compare("Idle") == 0)

@@ -36,6 +36,7 @@ target_positionZ = []
 target_speedZ = []
 target_prop_mass = []
 time_target = []
+thrust_target = []
 
 bag = rosbag.Bag('../log/log.bag')
 
@@ -65,15 +66,6 @@ for topic, msg, t in bag.read_messages(topics=['/control_pub']):
   z_torque = np.append(z_torque, [[msg.torque.z]]) 
   time_force = np.append(time_force, [[t.to_sec()]]) 
   
-# for topic, msg, t in bag.read_messages(topics=['/waypoint_pub']):
-#   new_target_pos = msg.position
-#   new_target_speed = msg.speed
-  
-#   target_position = np.append(target_position, [[new_target_pos.x, new_target_pos.y, new_target_pos.z]], axis = 0)
-#   target_speed = np.append(target_speed, [[new_target_speed.x, new_target_speed.y, new_target_speed.z]], axis = 0)
-#   target_prop_mass = np.append(target_prop_mass, [[msg.propeller_mass]])
-#   time_target = np.append(time_target, [[msg.time]])
-  
 
 for topic, msg, t in bag.read_messages(topics=['/target_trajectory']):
   new_waypoint = msg.trajectory
@@ -82,6 +74,7 @@ for topic, msg, t in bag.read_messages(topics=['/target_trajectory']):
   target_positionZ.append([point.position.z for point in new_waypoint])
   target_speedZ.append([point.speed.z for point in new_waypoint])
   target_prop_mass.append([point.propeller_mass for point in new_waypoint])
+  thrust_target.append([point.thrust for point in new_waypoint])
    
 bag.close()
 
@@ -89,7 +82,7 @@ time_target = np.array(time_target)
 target_positionZ = np.array(target_positionZ)
 target_speedZ = np.array(target_speedZ)
 target_prop_mass = np.array(target_prop_mass)
-
+thrust_target = np.array(thrust_target)
 
 print("Apogee: {}".format(max(position[:, 2])))
 
@@ -117,22 +110,10 @@ omega = np.rad2deg(omega)
 
 
 select = np.logical_and(time_state>tStart, time_state <tEnd)
-select_force = np.logical_and(time_force>tStart, time_force <tEnd)
+select_force = np.logical_and(time_force>tStart, time_force <tEnd) 
+select_target = np.zeros_like(time_target, dtype = bool)
 
-
-n_node_guidance = 11
-
-# target_positionZ = np.reshape(target_positionZ, (-1, n_node_guidance))
-# target_speedZ = np.reshape(target_speedZ, (-1, n_node_guidance))
-# target_prop_mass = np.reshape(target_prop_mass, (-1, n_node_guidance))
-# time_target = np.reshape(time_target, (-1, n_node_guidance))
-
-# select_target = np.logical_and(time_target>tStart, time_target <tEnd)
-
-# time_target = time_target[select_target]
-# target_prop_mass = target_prop_mass[select_target]
-# target_positionZ = target_positionZ[select_target]
-# target_speedZ = target_speedZ[select_target]
+select_target[::20,:] = True
 
 
 fig, axe = plt.subplots(3,4, figsize=(15,10))
@@ -143,14 +124,14 @@ axe[0][0].legend(l, ('X position [m]', 'Y position [m]'))
 
 
 l = axe[0][1].plot(time_state[select], position[:, 2][select], label = 'Z position [m]', linewidth=4)
-l = axe[0][1].plot(time_target.T[:,::8], target_positionZ.T[:,::8])
+l = axe[0][1].plot(time_target.T[:,::20], target_positionZ.T[:,::20])
 axe[0][1].legend()
 
 l = axe[1][0].plot(time_state[select], speed[:, 0:2][select])
 axe[1][0].legend(l, ('X speed [m/s]', 'Y speed [m]'))
 
-l = axe[1][1].plot(time_state[select], speed[:, 2][select],  label = 'Z speed [m/s]')
-l = axe[1][1].plot(time_target.T[:,::8], target_speedZ.T[:,::8])
+l = axe[1][1].plot(time_state[select], speed[:, 2][select],  label = 'Z speed [m/s]', linewidth=4)
+l = axe[1][1].plot(time_target.T[:,::20], target_speedZ.T[:,::20])
 axe[1][1].legend()
 
 
@@ -172,14 +153,18 @@ axe[1][3].legend()
 l = axe[2][2].plot(time_force[select_force], control_force[:, 0:2][select_force])
 axe[2][2].legend(l, ('X force [N]', 'Y force [N]'))
 
+thrust_target
+
 l = axe[2][3].plot(time_force[select_force], z_torque[select_force], label = 'Z torque [N.m]', color = "green")
 axe[2][3].legend()
 
-l = axe[2][1].plot(time_force[select_force], control_force[:, 2][select_force], label = "Z force [N]")
+l = axe[2][1].plot(time_force[select_force], control_force[:, 2][select_force], label = "Z force [N]", linewidth=4)
+l = axe[2][1].plot(time_target.T[:,::20], thrust_target.T[:,::20])
 axe[2][1].legend()
 
-l = axe[2][0].plot(time_state[select], prop_mass[select], label = "propellant mass [kg]")
-l = axe[2][0].plot(time_target.T[:,::8], target_prop_mass.T[:,::8])
+l = axe[2][0].plot(time_state[select], prop_mass[select], label = "propellant mass [kg]", linewidth=4)
+l = axe[2][0].plot(time_target.T[:,::20], target_prop_mass.T[:,::20])
+
 axe[2][0].legend()
 
 fig.tight_layout()

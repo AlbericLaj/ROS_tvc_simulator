@@ -431,7 +431,7 @@ int main(int argc, char **argv)
   mpc.ocp().xs << rocket.target_apogee[0], rocket.target_apogee[1], rocket.target_apogee[2],      0.0, 0.0, 0.0,        0.0;
 	
   // Thread to compute guidance. Duration defines interval time in seconds
-  ros::Timer guidance_thread = n.createTimer(ros::Duration(0.5),
+  ros::Timer guidance_thread = n.createTimer(ros::Duration(0.3),
   [&](const ros::TimerEvent&) 
 	{
       // Get current FSM and time
@@ -453,6 +453,7 @@ int main(int argc, char **argv)
                 current_state.propeller_mass;
 
         mpc.initial_conditions(x0);
+        mpc.x_guess(x0.replicate(7,1));	
 
         // Solve problem and save solution
         double time_now = ros::Time::now().toSec();
@@ -477,6 +478,8 @@ int main(int argc, char **argv)
           waypoint.propeller_mass = guidance_point(6);
 
           waypoint.time = mpc.time_grid(i) + current_fsm.time_now ;
+
+          waypoint.thrust = mpc.solution_u_at(i)(2);
 
           trajectory_msg.trajectory.push_back(waypoint);
         }
