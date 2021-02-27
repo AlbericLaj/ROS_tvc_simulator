@@ -5,6 +5,8 @@ from tvc_simulator.msg import FSM
 from tvc_simulator.msg import State
 from tvc_simulator.msg import Control
 from tvc_simulator.msg import Sensor
+from tvc_simulator.msg import Trajectory
+from tvc_simulator.msg import Waypoint
 
 import numpy as np
 import math
@@ -30,10 +32,10 @@ control_force = np.zeros((1,3))
 z_torque = np.zeros((1,1))
 time_force = np.zeros((1,1))
 
-target_position = np.zeros((1,3))
-target_speed = np.zeros((1,3))
-target_prop_mass = np.zeros((1,1))
-time_target = np.zeros((1,1))
+target_positionZ = []
+target_speedZ = []
+target_prop_mass = []
+time_target = []
 
 bag = rosbag.Bag('../log/log.bag')
 
@@ -63,17 +65,31 @@ for topic, msg, t in bag.read_messages(topics=['/control_pub']):
   z_torque = np.append(z_torque, [[msg.torque.z]]) 
   time_force = np.append(time_force, [[t.to_sec()]]) 
   
-for topic, msg, t in bag.read_messages(topics=['/waypoint_pub']):
-  new_target_pos = msg.position
-  new_target_speed = msg.speed
+# for topic, msg, t in bag.read_messages(topics=['/waypoint_pub']):
+#   new_target_pos = msg.position
+#   new_target_speed = msg.speed
   
-  target_position = np.append(target_position, [[new_target_pos.x, new_target_pos.y, new_target_pos.z]], axis = 0)
-  target_speed = np.append(target_speed, [[new_target_speed.x, new_target_speed.y, new_target_speed.z]], axis = 0)
-  target_prop_mass = np.append(target_prop_mass, [[msg.propeller_mass]])
-  time_target = np.append(time_target, [[msg.time]])
+#   target_position = np.append(target_position, [[new_target_pos.x, new_target_pos.y, new_target_pos.z]], axis = 0)
+#   target_speed = np.append(target_speed, [[new_target_speed.x, new_target_speed.y, new_target_speed.z]], axis = 0)
+#   target_prop_mass = np.append(target_prop_mass, [[msg.propeller_mass]])
+#   time_target = np.append(time_target, [[msg.time]])
   
+
+for topic, msg, t in bag.read_messages(topics=['/target_trajectory']):
+  new_waypoint = msg.trajectory
+
+  time_target.append([point.time for point in new_waypoint])
+  target_positionZ.append([point.position.z for point in new_waypoint])
+  target_speedZ.append([point.speed.z for point in new_waypoint])
+  target_prop_mass.append([point.propeller_mass for point in new_waypoint])
    
 bag.close()
+
+time_target = np.array(time_target)
+target_positionZ = np.array(target_positionZ)
+target_speedZ = np.array(target_speedZ)
+target_prop_mass = np.array(target_prop_mass)
+
 
 print("Apogee: {}".format(max(position[:, 2])))
 
@@ -88,10 +104,6 @@ control_force = control_force[1:]
 z_torque = z_torque[1:]
 time_force = time_force[1:]
 
-target_position = target_position[1:]
-target_speed = target_speed[1:]
-target_prop_mass = target_prop_mass[1:]
-time_target = time_target[1:]
 
 
 time_force = time_force - time_init
@@ -107,17 +119,15 @@ omega = np.rad2deg(omega)
 select = np.logical_and(time_state>tStart, time_state <tEnd)
 select_force = np.logical_and(time_force>tStart, time_force <tEnd)
 
-target_positionZ = target_position[:, 2]
-target_speedZ = target_speed[:, 2]
 
 n_node_guidance = 11
 
-target_positionZ = np.reshape(target_positionZ, (-1, n_node_guidance))
-target_speedZ = np.reshape(target_speedZ, (-1, n_node_guidance))
-target_prop_mass = np.reshape(target_prop_mass, (-1, n_node_guidance))
-time_target = np.reshape(time_target, (-1, n_node_guidance))
+# target_positionZ = np.reshape(target_positionZ, (-1, n_node_guidance))
+# target_speedZ = np.reshape(target_speedZ, (-1, n_node_guidance))
+# target_prop_mass = np.reshape(target_prop_mass, (-1, n_node_guidance))
+# time_target = np.reshape(time_target, (-1, n_node_guidance))
 
-select_target = np.logical_and(time_target>tStart, time_target <tEnd)
+# select_target = np.logical_and(time_target>tStart, time_target <tEnd)
 
 # time_target = time_target[select_target]
 # target_prop_mass = target_prop_mass[select_target]
@@ -133,7 +143,7 @@ axe[0][0].legend(l, ('X position [m]', 'Y position [m]'))
 
 
 l = axe[0][1].plot(time_state[select], position[:, 2][select], label = 'Z position [m]', linewidth=4)
-l = axe[0][1].plot(time_target.T[:,1:10], target_positionZ.T[:,1:10])
+l = axe[0][1].plot(time_target.T[:,::8], target_positionZ.T[:,::8])
 axe[0][1].legend()
 
 l = axe[1][0].plot(time_state[select], speed[:, 0:2][select])
@@ -145,15 +155,12 @@ axe[1][1].legend()
 
 
 l = axe[0][2].plot(time_state[select], attitude[:, 1:3][select]) 
-#axe[0][2].axhline(y=-180, color='r', linestyle='--')
-#axe[0][2].axhline(y=180, color='r', linestyle='--')
+axe[0][2].axhline(y=-30, color='r', linestyle='--')
+axe[0][2].axhline(y=30, color='r', linestyle='--')
 axe[0][2].legend(l, ('X [degree]', 'Y [degree]'))
 
 #l = axe[0][3].plot(time_state[select], quaternion[select])
-#axe[0][3].legend(l, ('W','X', 'Y', 'Z'))
 l = axe[0][3].plot(time_state[select], attitude[:,0][select],  label = 'Z [degree]', color = "green")
-#axe[0][3].axhline(y=-180, color='r', linestyle='--')
-#axe[0][3].axhline(y=180, color='r', linestyle='--')
 axe[0][3].legend()
 
 l = axe[1][2].plot(time_state[select], omega[:, 0:2][select])

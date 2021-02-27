@@ -22,6 +22,7 @@
   <node name="visualization" pkg="tvc_simulator" type="visualization" />
   <node name="rocket_state" pkg="rostopic" type="rostopic" args="echo /rocket_state"  /> 
   <node name="rqt_gui" pkg="rqt_gui" type="rqt_gui" args="--perspective-file $(find tvc_simulator)/rviz/rocket_GUI.perspective"/>
+  <node pkg="rosbag" type="record" name="recorder" args="record -a -O $(find tvc_simulator)/log/log.bag"/>
 
 </launch>
 
