@@ -330,7 +330,8 @@ void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
 // Service function: send back waypoint at requested time
 bool sendWaypoint(tvc_simulator::GetWaypoint::Request &req, tvc_simulator::GetWaypoint::Response &res)
 {
-  Eigen::Matrix<double, 7, 1> next_waypoint; next_waypoint =  mpc.solution_x_at((float)(req.target_time-current_fsm.time_now)); 
+  float time_request = req.target_time-current_fsm.time_now;
+  Eigen::Matrix<double, 7, 1> next_waypoint; next_waypoint =  mpc.solution_x_at(time_request); 
   
   res.target_point.position.x = next_waypoint(0);
   res.target_point.position.y = next_waypoint(1);
@@ -342,8 +343,10 @@ bool sendWaypoint(tvc_simulator::GetWaypoint::Request &req, tvc_simulator::GetWa
 
   res.target_point.propeller_mass = next_waypoint(6);
 
+  res.target_point.thrust = mpc.solution_u_at(time_request)(2);
+
   res.target_point.time = req.target_time;
-	
+  
 	return true;
 }
 
@@ -380,12 +383,12 @@ int main(int argc, char **argv)
 	current_fsm.time_now = 0;
 	current_fsm.state_machine = "Idle";
 
-    // Initialize rocket class with useful parameters
+  // Initialize rocket class with useful parameters
   rocket.init(n);
 
 	// Init MPC ----------------------------------------------------------------------------------------------------------------------
 	
-  mpc.settings().max_iter = 5;
+  mpc.settings().max_iter = 10;
   mpc.settings().line_search_max_iter = 10;
   //mpc.m_solver.settings().max_iter = 1000;
   //mpc.m_solver.settings().scaling = 10;
@@ -401,7 +404,7 @@ int main(int argc, char **argv)
   
   //lbu << -inf, -inf, -inf;
   //ubu <<  inf,  inf,  inf;
-  mpc.control_bounds(lbu, ubu);
+  mpc.control_bounds(lbu, ubu); 
 
 
   // State constraints
@@ -455,7 +458,6 @@ int main(int argc, char **argv)
         double time_now = ros::Time::now().toSec();
         mpc.solve();
         ROS_INFO("Gdc T= %.2f ms, st: %d, iter: %d",  1000*(ros::Time::now().toSec()-time_now), mpc.info().status.value,  mpc.info().iter);
-        //std::cout << mpc.solution_u_at(0) << "\n";
 
         // Send full optimal state as waypoint trajectory
         tvc_simulator::Trajectory trajectory_msg;

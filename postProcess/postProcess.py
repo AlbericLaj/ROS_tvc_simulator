@@ -71,8 +71,11 @@ for topic, msg, t in bag.read_messages(topics=['/waypoint_pub']):
   target_speed = np.append(target_speed, [[new_target_speed.x, new_target_speed.y, new_target_speed.z]], axis = 0)
   target_prop_mass = np.append(target_prop_mass, [[msg.propeller_mass]])
   time_target = np.append(time_target, [[msg.time]])
+  
    
 bag.close()
+
+print("Apogee: {}".format(max(position[:, 2])))
 
 prop_mass = prop_mass[1:]
 speed = speed[1:]
@@ -130,14 +133,14 @@ axe[0][0].legend(l, ('X position [m]', 'Y position [m]'))
 
 
 l = axe[0][1].plot(time_state[select], position[:, 2][select], label = 'Z position [m]', linewidth=4)
-l = axe[0][1].plot(time_target.T, target_positionZ.T)
+l = axe[0][1].plot(time_target.T[:,1:10], target_positionZ.T[:,1:10])
 axe[0][1].legend()
 
 l = axe[1][0].plot(time_state[select], speed[:, 0:2][select])
 axe[1][0].legend(l, ('X speed [m/s]', 'Y speed [m]'))
 
 l = axe[1][1].plot(time_state[select], speed[:, 2][select],  label = 'Z speed [m/s]')
-l = axe[1][1].plot(time_target.T[:,0], target_speedZ.T[:,0])
+l = axe[1][1].plot(time_target.T[:,::8], target_speedZ.T[:,::8])
 axe[1][1].legend()
 
 
@@ -169,7 +172,7 @@ l = axe[2][1].plot(time_force[select_force], control_force[:, 2][select_force], 
 axe[2][1].legend()
 
 l = axe[2][0].plot(time_state[select], prop_mass[select], label = "propellant mass [kg]")
-l = axe[2][0].plot(time_target.T, target_prop_mass.T)
+l = axe[2][0].plot(time_target.T[:,::8], target_prop_mass.T[:,::8])
 axe[2][0].legend()
 
 fig.tight_layout()
