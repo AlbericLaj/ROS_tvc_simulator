@@ -40,9 +40,9 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   message_generation
   geometry_msgs
-	genmsg
-	visualization_msgs
-        tf2_ros
+  genmsg
+  visualization_msgs
+  tf2_ros
 	#polympc-ros
 )
 
@@ -80,20 +80,20 @@ find_package(catkin REQUIRED COMPONENTS
 
 ## Generate messages in the 'msg' folder
  add_message_files(
-   FILES
-	Control.msg
-	State.msg
-	FSM.msg
+  FILES
+  Control.msg
+  State.msg
+  FSM.msg
   Waypoint.msg
-	Sensor.msg
-    Trajectory.msg
+  Sensor.msg
+  Trajectory.msg
 )
 
 ## Generate services in the 'srv' folder
  add_service_files(
-   FILES
-   GetFSM.srv
-   GetWaypoint.srv
+  FILES
+  GetFSM.srv
+  GetWaypoint.srv
  )
 
 ## Generate actions in the 'action' folder
@@ -197,11 +197,11 @@ include_directories(
 
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination
- catkin_install_python(PROGRAMS
-   scripts/integrator.py
-   scripts/disturbance.py
-   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
- )
+catkin_install_python(PROGRAMS
+  scripts/integrator.py
+  scripts/disturbance.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html

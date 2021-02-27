@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
     thrust_vector.scale.z = head_length;
 
     //MPC horizon
-    const float line_width = 0.6;
+    const float line_width = 0.8;
     mpc_horizon.type = visualization_msgs::Marker::LINE_STRIP;
     mpc_horizon.scale.x = line_width;
 
@@ -239,7 +239,6 @@ int main(int argc, char **argv) {
             if (!ros::ok()) {
                 return 0;
             }
-            ROS_WARN_ONCE("Please create a subscriber to the marker");
             sleep(1);
         }
 
