@@ -122,27 +122,35 @@ int main(int argc, char **argv) {
 
     visualization_msgs::Marker rocket_marker, thrust_vector, mpc_horizon, target_trajectory;
 
-    init_marker(rocket_marker, "rocket marker", 0.75, 0.75, 0.75);
+    float stl_alpha;
+    n.getParam("/visualization/stl_alpha", stl_alpha);
+
+    init_marker(rocket_marker, "rocket marker", 0.75, 0.75, 0.75, stl_alpha);
     init_marker(thrust_vector, "thrust vector", 1, 0.5, 0);
     init_marker(mpc_horizon, "mpc horizon", 0.1, 0.3, 0.7, 0.4);
     init_marker(target_trajectory, "target trajectory", 0.15, 0.5, 0.25, 0.4);
 
     //setup rocket marker
     rocket_marker.type = visualization_msgs::Marker::MESH_RESOURCE;
-    rocket_marker.mesh_resource = "package://tvc_simulator/rviz/Bellalui_1.stl";
+    std::string stl_name;
+    n.getParam("/visualization/stl_model", stl_name);
+    rocket_marker.mesh_resource = "package://tvc_simulator/rviz/"+stl_name;
 
     // Set the scale of the marker -- 1x1x1 here means 1m on a side
-    rocket_marker.scale.x = 1e-3;
-    rocket_marker.scale.y = 1e-3;
-    rocket_marker.scale.z = 1e-3;
+    float stl_scale;
+    n.getParam("/visualization/stl_model_scale", stl_scale);
+    rocket_marker.scale.x = stl_scale;
+    rocket_marker.scale.y = stl_scale;
+    rocket_marker.scale.z = stl_scale;
 
     //thrust vector
-    const float shaft_diameter = 1;
-    const float arrow_diameter = 2;
-    const float head_length = 2;
-    const float thrust_scaling = 0.01;
-    //TODO use real offset and correct rocket scaling
-    const float offset = 20;
+    const float shaft_diameter = 0.1;
+    const float arrow_diameter = 0.2;
+    const float head_length = 0.2;
+    float thrust_scaling;
+    n.getParam("/visualization/thrust_vector_scaling", thrust_scaling);
+    float offset;
+    n.getParam("/visualization/CM_to_thrust_distance", offset);
 
     thrust_vector.type = visualization_msgs::Marker::ARROW;
     thrust_vector.scale.x = shaft_diameter;
@@ -150,14 +158,13 @@ int main(int argc, char **argv) {
     thrust_vector.scale.z = head_length;
 
     //MPC horizon
-    const float line_width = 0.8;
+    const float line_width = 0.1;
     mpc_horizon.type = visualization_msgs::Marker::LINE_STRIP;
     mpc_horizon.scale.x = line_width;
 
     //target trajectory
     target_trajectory.type = visualization_msgs::Marker::LINE_STRIP;
     target_trajectory.scale.x = line_width;
-
 
     // Create RViz publisher (10Hz)
     ros::Rate r(10);

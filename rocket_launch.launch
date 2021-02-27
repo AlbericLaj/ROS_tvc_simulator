@@ -11,6 +11,10 @@
   <group ns="perturbation">
       <rosparam file="$(find tvc_simulator)/config/perturbations_parameters.yaml" />
   </group>
+
+  <group ns="visualization">
+    <rosparam file="$(find tvc_simulator)/config/visualization_parameters.yaml" />
+  </group>
 ''
 
   <node name="control" pkg="tvc_simulator" type="control" output ="screen"/>
@@ -18,6 +22,7 @@
   <node name="integrator" pkg="tvc_simulator" type="integrator.py" cwd = "node" output ="screen"/>
   <node name="disturbance" pkg="tvc_simulator" type="disturbance.py" cwd = "node"/>
   <node name="data_fusion" pkg="tvc_simulator" type="data_fusion" cwd = "node"/>
+  <node name="time_keeper" pkg="tvc_simulator" type="time_keeper" cwd = "node"/>
 
   <node name="visualization" pkg="tvc_simulator" type="visualization" />
   <node name="rocket_state" pkg="rostopic" type="rostopic" args="echo /rocket_state"  /> 
