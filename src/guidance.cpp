@@ -329,7 +329,8 @@ void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
 // Service function: send back waypoint at requested time
 bool sendWaypoint(tvc_simulator::GetWaypoint::Request &req, tvc_simulator::GetWaypoint::Response &res)
 {
-  Eigen::Matrix<double, 7, 1> next_waypoint; next_waypoint =  mpc.solution_x_at((float)(req.target_time-current_fsm.time_now)); 
+  float time_request = req.target_time-current_fsm.time_now;
+  Eigen::Matrix<double, 7, 1> next_waypoint; next_waypoint =  mpc.solution_x_at(time_request); 
   
   res.target_point.position.x = next_waypoint(0);
   res.target_point.position.y = next_waypoint(1);
@@ -341,8 +342,10 @@ bool sendWaypoint(tvc_simulator::GetWaypoint::Request &req, tvc_simulator::GetWa
 
   res.target_point.propeller_mass = next_waypoint(6);
 
+  res.target_point.thrust = mpc.solution_u_at(time_request)(2);
+
   res.target_point.time = req.target_time;
-	
+  
 	return true;
 }
 

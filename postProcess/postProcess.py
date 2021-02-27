@@ -75,6 +75,8 @@ for topic, msg, t in bag.read_messages(topics=['/waypoint_pub']):
    
 bag.close()
 
+print("Apogee: {}".format(max(position[:, 2])))
+
 prop_mass = prop_mass[1:]
 speed = speed[1:]
 omega = omega[1:]
