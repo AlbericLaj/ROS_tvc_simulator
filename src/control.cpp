@@ -403,15 +403,15 @@ int main(int argc, char **argv)
   using osqp_solver_t = polympc::OSQP<control_ocp::VAR_SIZE, control_ocp::NUM_EQ, control_ocp::scalar_t>;
 
 
-	// Init ROS time keeper node
+	// Init ROS control node
   ros::init(argc, argv, "control");
   ros::NodeHandle n;
 
 	// Create control publisher
 	ros::Publisher control_pub = n.advertise<tvc_simulator::Control>("control_pub", 10);
 
-    // Create path publisher
-    ros::Publisher MPC_horizon_pub = n.advertise<tvc_simulator::Trajectory>("mpc_horizon", 10);
+  // Create path publisher
+  ros::Publisher MPC_horizon_pub = n.advertise<tvc_simulator::Trajectory>("mpc_horizon", 10);
 
 	// Subscribe to state message from simulation
   ros::Subscriber rocket_state_sub = n.subscribe("rocket_state", 100, rocket_stateCallback);

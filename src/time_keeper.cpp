@@ -81,30 +81,38 @@ int main(int argc, char **argv)
 		// Update current time
 		current_fsm.time_now = ros::Time::now().toSec() - time_zero;
 
-	// Update FSM
+		// Update FSM
 		if (current_fsm.state_machine.compare("Idle") == 0)
 		{
 			// Do nothing
 		}
 
-		else if (current_fsm.state_machine.compare("Launch") == 0)
+		else
 		{
-      // End of burn -> no more thrust
-      if(current_rocket_state.propeller_mass <0)
-      {
-        current_fsm.state_machine = "Coast";
-      }
+			if (current_fsm.state_machine.compare("Launch") == 0)
+			{
+				// End of burn -> no more thrust
+				if(current_rocket_state.propeller_mass <0)
+				{
+					current_fsm.state_machine = "Coast";
+				}
+
+			}
+
+			else if (current_fsm.state_machine.compare("Coast") == 0)
+			{
+			// Do nothing for now
+			}
+
+			// Publish time + state machine    
+			timer_pub.publish(current_fsm);
+
+			//ROS_INFO("Sent info: State = %s, time = %f", current_fsm.state_machine.c_str(), current_fsm.time_now);
 
 		}
 
-		else if (current_fsm.state_machine.compare("Coast") == 0)
-		{
-		// Do nothing for now
-		}
-
-		// Publish time + state machine    
-		timer_pub.publish(current_fsm);
-//	  ROS_INFO("Sent info: State = %s, time = %f", current_fsm.state_machine.c_str(), current_fsm.time_now);
+		
+		
 
 	});
 

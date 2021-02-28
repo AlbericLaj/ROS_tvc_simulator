@@ -149,7 +149,7 @@ if __name__ == '__main__':
 	rospy.Subscriber("disturbance_pub", Control, disturbance_callback)
 
 	# Publisher for rocket state
-	rocket_state_pub = rospy.Publisher('rocket_state', State, queue_size=10)
+	#rocket_state_pub = rospy.Publisher('rocket_state', State, queue_size=10)
 
 	# Publisher for fake rocket sensor data
 	sensor_pub = rospy.Publisher('sensor_pub', Sensor, queue_size=10)
@@ -162,7 +162,7 @@ if __name__ == '__main__':
 	rocket_sim = init_integrator()
 
 	# Init state (position, speed, quaternion, angular speed)
-	S_new = np.array([0,0,0, 0,0,30,     0.0, 0.0,  0.0,  1.0,      0.0, 0.0, 0.0     , rocket_sim.rocket.get_propellant_mass()])
+	S_new = np.array([0,0,0, 0,0,30,     0.0, 0.17364818,  0.0,  0.98480775,      5*0.0174533, 0.0, 0.0     , rocket_sim.rocket.get_propellant_mass()])
 	T_new = 0
 	
 	solver_dopri5 =  ode(rocket_sim.Dynamics_6DOF).set_integrator('dopri5') 
@@ -247,7 +247,7 @@ if __name__ == '__main__':
 
 		rocket_state.propeller_mass = S_new[13]
 		
-		rocket_state_pub.publish(rocket_state)
+		#rocket_state_pub.publish(rocket_state)
 
 		# Parse sensor data and publish it on /sensor_pub topic
 		current_sensor = Sensor()

@@ -269,6 +269,10 @@ add_executable(data_fusion src/data_fusion.cpp)
 target_link_libraries(data_fusion ${catkin_LIBRARIES})
 add_dependencies(data_fusion ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
+add_executable(fast_integrator src/fast_integrator.cpp)
+target_link_libraries(fast_integrator Eigen3::Eigen ${catkin_LIBRARIES})
+add_dependencies(fast_integrator ${${PROJECT_NAME}_EXPORTED_TARGETS})
+
 add_executable(visualization src/visualization.cpp)
 target_link_libraries(visualization ${catkin_LIBRARIES})
 add_dependencies(visualization ${${PROJECT_NAME}_EXPORTED_TARGETS})
