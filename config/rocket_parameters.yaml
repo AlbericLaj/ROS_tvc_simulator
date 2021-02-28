@@ -12,7 +12,7 @@ stage_z:
   - 4.16 
 fin_n: 3
 fin_top_offset: 3.83 
-fin_span: 0.2
+fin_span: 0.1
 fin_root_chord: 0.28 # base length
 fin_tip_chord: 0.125
 fin_sweep: 0.1071e-3
@@ -29,12 +29,12 @@ propellant_mass: 6 #3.693
 propellant_CM: 3
 Isp: 213
 maxThrust:
-  - 50
-  - 50
+  - 100
+  - 100
   - 2400
 minThrust: 
-  - -50
-  - -50
+  - -100
+  - -100
   - 100
 minTorque: -50
 maxTorque: 50

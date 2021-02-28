@@ -77,6 +77,9 @@ class Rocket:
         self.IMU_gyro = np.zeros(3)
         self.baro_height = 0
 
+        self.aero_force = np.zeros(3)
+        self.aero_torque = np.zeros(3)
+
     # ------------------
     # METHODS
     # ------------------
@@ -111,6 +114,14 @@ class Rocket:
 
     def get_sensor_data(self):
         return [self.IMU_acc, self.IMU_gyro, self.baro_height]
+        
+    def set_aero(self, aero_force, aero_torque):
+        self.aero_force = aero_force
+        self.aero_torque = aero_torque
+
+    def get_aero(self):
+        return [self.aero_force, self.aero_torque]
+
 
     def add_lugs(self, lugs: list):
         self.lug_n = lugs[0]

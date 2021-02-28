@@ -173,9 +173,9 @@ public:
     static constexpr double t_start = 0.0;
     static constexpr double t_stop  = CONTROL_HORIZON;
 
-    Eigen::DiagonalMatrix<scalar_t, 14> Q{1.0, 1.0, 5e4,    0.2, 0.2, 0,   500, 500, 500, 500,  100, 100, 100,    0};
-    Eigen::DiagonalMatrix<scalar_t, 4> R{5e2, 5e2, 1000, 5e2};
-    Eigen::DiagonalMatrix<scalar_t, 14> QN{1.0, 1.0, 5e4,   0.2, 0.2, 0,    500, 500, 500, 500,   100, 100, 100,    0};
+    Eigen::DiagonalMatrix<scalar_t, 14> Q{1.0, 1.0, 5e4,    0.2, 0.2, 100,   5000, 5000, 5000, 5000,  500, 500, 500,    0};
+    Eigen::DiagonalMatrix<scalar_t, 4> R{5, 5, 1000, 5};
+    Eigen::DiagonalMatrix<scalar_t, 14> QN{1.0, 1.0, 5e4,   0.2, 0.2, 100,    5000, 5000, 5000, 5000,   500, 500, 500,    0};
 
     Eigen::Matrix<scalar_t, 14,1> xs;
     Eigen::Matrix<scalar_t, 4,1> us{0.0, 0.0, 0, 0.0};
@@ -484,7 +484,7 @@ int main(int argc, char **argv)
   std::vector<int> average_status;
 
   // Thread to compute control. Duration defines interval time in seconds
-  ros::Timer control_thread = n.createTimer(ros::Duration(0.1), [&](const ros::TimerEvent&) 
+  ros::Timer control_thread = n.createTimer(ros::Duration(0.06), [&](const ros::TimerEvent&) 
 	{
   
     // Get current FSM and time

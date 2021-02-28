@@ -101,6 +101,119 @@ class Simulator3D:
 
         return x_dot, v_dot
 
+    def Compute_aero(self, s, thrust_force):
+
+        x = s[0:3]
+        v = s[3:6]
+        q = s[6:10]
+        w = s[10:13]
+        propellant_mass = s[13]
+
+
+        # Normalise quaternion
+        q = normalize_vector(q)
+        
+
+        # Rotation matrix from rocket coordinates to Earth coordinates
+        c = quat2rotmat(q)
+        angle = rot2anglemat(c)
+
+        # Rocket principle frame vectors expressed in Earth coordinates
+        ya = c.dot(np.array([1, 0, 0]).transpose())  # Yaw axis
+        pa = c.dot(np.array([0, 1, 0]).transpose())  # Pitch axis
+        ra = c.dot(np.array([0, 0, 1]).transpose())  # Roll axis
+
+        # Earth coordinates vectors expressed in Earth's frame
+        xe = np.array([1, 0, 0]).transpose()
+        ye = np.array([0, 1, 0]).transpose()
+        ze = np.array([0, 0, 1]).transpose()
+
+		# Mass properties				
+        m = self.rocket.get_empty_mass() + propellant_mass
+        dMdt = -np.linalg.norm(thrust_force)/(self.rocket.get_motor_Isp()*9.81)
+        cg = (self.rocket.get_dry_cg()*self.rocket.get_empty_mass() + self.rocket.get_propellant_cg()*propellant_mass)/m
+        Sm = self.rocket.get_max_cross_section_surface
+        #I = c.transpose().dot(self.rocket.get_rocket_inertia()).dot(c)
+        I = c.dot(self.rocket.get_rocket_inertia()).dot(c.transpose())
+
+        # Environment
+        g = 9.81  # Gravity [m/s^2]
+        rho = self.Environment.get_density(x[2] + self.Environment.ground_altitude)
+
+        nu = self.Environment.get_viscosity(x[2] + self.Environment.ground_altitude) # !!! take 200 us
+
+        a = self.Environment.get_speed_of_sound(x[2] + self.Environment.ground_altitude)
+
+
+        # Aerodynamic corrective forces --------------------
+        # Compute center of mass angle of attack
+        v_cm = v - self.Environment.get_V_inf()*self.Environment.V_dir
+
+
+        v_cm_mag = np.linalg.norm(v_cm)
+        alpha_cm = math.atan2(np.linalg.norm(np.cross(ra, v_cm)), np.dot(ra, v_cm)) # !!! take 200 us
+
+        # Mach number
+        Mach = v_cm_mag / a
+
+        # Normal lift coefficient and center of pressure
+        CNa, Xcp, CNa_bar, CP_bar = normal_lift(self.rocket, alpha_cm, 1.1, Mach, angle[2], 1)
+
+        # Stability margin
+        margin = Xcp - cg
+
+        # Compute rocket angle of attack
+        if np.linalg.norm(w) != 0:
+            w_norm = w / np.linalg.norm(w)
+        else:
+            w_norm = np.zeros((3, 1))
+  
+        wind_dir = np.dot(ra, w_norm)
+        if wind_dir >  1: wind_dir =  1
+        if wind_dir < -1: wind_dir = -1
+                
+        v_rel = v_cm + margin * math.sin(math.acos(wind_dir)) * np.cross(ra, w) # center of mass speed
+        v_mag = np.linalg.norm(v_rel)
+        v_norm = normalize_vector(v_rel)
+
+        # Angle of attack
+        v_cross = np.cross(ra, v_norm)
+        v_cross_norm = normalize_vector(v_cross)
+        alpha = math.atan2(np.linalg.norm(np.cross(ra, v_norm)), np.dot(ra, v_norm))
+        delta = math.atan2(np.linalg.norm(np.cross(ra, ze)), np.dot(ra, ze))
+
+        # Normal force
+        na = np.cross(ra, v_cross)
+        if np.linalg.norm(na) == 0:
+            n = np.array([0, 0, 0]).transpose()
+        else:
+            n = 0.5 * rho * Sm * CNa * alpha * v_mag ** 2 * na/ (np.linalg.norm(na)+0.05) # --> constant added to avoid division by small number
+
+
+        # Drag
+        # Drag coefficient
+        cd = drag(self.rocket, alpha, v_mag, nu, a)*self.rocket.CD_fac  # !!! take 3000 us !!! -> actually half of the computation time
+        
+        # Drag force
+        d = -0.5 * rho * Sm * cd * v_mag ** 2 * v_norm
+
+
+        # Moment estimation ------------------------
+
+        # Aerodynamic corrective moment
+        mn = np.linalg.norm(n) * margin * v_cross_norm
+
+        # Aerodynamic damping moment
+        w_pitch = w - np.dot(w, ra) * ra
+        cdm = pitch_damping_moment(self.rocket, rho, CNa_bar, CP_bar, dMdt, cg, np.linalg.norm(w_pitch), v_mag)
+        md = -0.5 * rho * cdm * Sm * v_mag ** 2 * normalize_vector(w_pitch)
+
+
+        self.rocket.set_aero(n+d, mn+md)
+
+
+
+
     def Dynamics_6DOF(self, t, s, thrust_force, thrust_torque):
         start_time = time.time() # -----------------------------------------------------------------
         
@@ -212,8 +325,7 @@ class Simulator3D:
 
         # Total forces
         f_tot = T + G #+ n + d
-        #print("Python: ", T+G)
-        
+
         # Moment estimation
 
         # Aerodynamic corrective moment
@@ -239,6 +351,7 @@ class Simulator3D:
         S_dot = np.concatenate((X_dot, V_dot, q_dot, w_dot, np.array([dMdt])))
 
         self.rocket.set_sensor_data(V_dot, w, x[2], c)
+
         #print(1000*(time.time()-start_time))
 
         return S_dot

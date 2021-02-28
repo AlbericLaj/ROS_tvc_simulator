@@ -102,13 +102,28 @@ Eigen::Matrix<double, 3,2> aero_control;
 // Global variable with last requested fsm
 tvc_simulator::FSM current_fsm;
 
-// Callback function to store last received state
+// Callback function to store last received control
 void rocket_controlCallback(const tvc_simulator::Control::ConstPtr& control_law)
 {
   rocket_control << control_law->force.x,  control_law->torque.x,
                     control_law->force.y,  control_law->torque.y,
                     control_law->force.z,  control_law->torque.z;
 }   
+
+// Callback function to store last received aero force and torque
+void rocket_aeroCallback(const tvc_simulator::Control::ConstPtr& rocket_aero)
+{
+  aero_control <<   rocket_aero->force.x,  rocket_aero->torque.x,
+                    rocket_aero->force.y,  rocket_aero->torque.y,
+                    rocket_aero->force.z,  rocket_aero->torque.z;
+}   
+
+// Callback function to store last received fsm
+void fsmCallback(const tvc_simulator::FSM::ConstPtr& fsm)
+{
+	current_fsm.time_now = fsm->time_now;
+  current_fsm.state_machine = fsm->state_machine;
+}
 
 
 using namespace std;
@@ -190,6 +205,12 @@ int main(int argc, char **argv)
   // Subscribe to control message from control node
   ros::Subscriber rocket_control_sub = n.subscribe("control_pub", 100, rocket_controlCallback);
 
+  // Subscribe to aero message 
+  ros::Subscriber rocket_aero_sub = n.subscribe("rocket_aero", 100, rocket_aeroCallback);
+
+  // Subscribe to time_keeper for fsm and time
+  ros::Subscriber fsm_sub = n.subscribe("fsm_pub", 100, fsmCallback);
+
 	// Create fast state publisher
 	ros::Publisher rocket_state_pub = n.advertise<tvc_simulator::State>("rocket_state", 10);
 
@@ -216,8 +237,8 @@ int main(int argc, char **argv)
                     0, 0;
 
   // Init state X   
-  static state X0;
-  X0 << 0, 0, 0,   0, 0, 30,     0.0, 0.17364818 , 0.0 , 0.98480775 ,      5*0.0174533, 0, 0,    rocket.propellant_mass;
+  state X0;
+  X0 << 0, 0, 0,   0, 0, 30,     0.0, 0.0 , 0.0 , 1.0 ,      0, 0, 0,    rocket.propellant_mass;
   state xout = X0;
 
   // Init solver
@@ -228,11 +249,7 @@ int main(int argc, char **argv)
   // Thread to integrate state. Duration defines interval time in seconds
   ros::Timer integrator_thread = n.createTimer(ros::Duration(period_integration), [&](const ros::TimerEvent&) 
 	{
-    // Get current FSM and time
-    if(client_fsm.call(srv_fsm))
-    {
-      current_fsm = srv_fsm.response.fsm;
-    }
+    double time_now = ros::Time::now().toSec();
 
     // State machine ------------------------------------------
 		if (current_fsm.state_machine.compare("Idle") == 0)
@@ -284,6 +301,8 @@ int main(int argc, char **argv)
     current_state.propeller_mass = X0(13);
 
     rocket_state_pub.publish(current_state);
+
+    //std::cout << "Fast integration time: " << 1000*(ros::Time::now().toSec()-time_now) << "ms \n";
   });
 
   // Automatic callback of service and publisher from here

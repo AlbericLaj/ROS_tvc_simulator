@@ -25,7 +25,7 @@ tvc_simulator::Sensor current_sensor;
 void fsmCallback(const tvc_simulator::FSM::ConstPtr& fsm)
 {
 	current_fsm.time_now = fsm->time_now;
-  current_fsm.state_machine = fsm->state_machine;
+  	current_fsm.state_machine = fsm->state_machine;
 }
 
 // Callback function to store last received control
