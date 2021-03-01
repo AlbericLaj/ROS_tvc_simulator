@@ -32,18 +32,38 @@ class Rocket
 
     std::vector<float> maxThrust{0, 0, 0};
     std::vector<float> minThrust{0, 0, 0};
+
     float dry_CM;
     float propellant_CM;
+    float total_CM; // Current Cm of rocket, in real time
 
-    float CM_average;
+    float total_length;
 
     std::vector<float> target_apogee = {0, 0, 0};
     std::vector<float> Cd = {0, 0, 0};
     std::vector<float> surface = {0, 0, 0};
     std::vector<float> drag_coeff = {0, 0, 0};
     
-    std::vector<float> I{0, 0, 0};
+    std::vector<float> dry_Inertia{0, 0, 0};
+    std::vector<float> total_Inertia{0, 0, 0};
+
     std::vector<float> J_inv{0, 0, 0};
+
+
+    void update_CM( float current_prop_mass)
+    {
+      total_CM = total_length - (dry_CM*dry_mass + propellant_CM*current_prop_mass)/(dry_mass+current_prop_mass) ; // From aft of rocket
+
+      float new_inertia = dry_Inertia[0] + pow(total_CM-(total_length-propellant_CM), 2)*current_prop_mass;
+
+      total_Inertia[0] = new_inertia;
+      total_Inertia[1] = new_inertia;
+
+      J_inv[0] = total_CM/total_Inertia[0];
+      J_inv[1] = total_CM/total_Inertia[1];
+      J_inv[2] = 1/total_Inertia[2];
+    }
+
 
     void init(ros::NodeHandle n)
     {
@@ -57,7 +77,7 @@ class Rocket
       n.getParam("/rocket/propellant_mass", propellant_mass);
       
       n.getParam("/rocket/Cd", Cd);
-      n.getParam("/rocket/dry_I", I);
+      n.getParam("/rocket/dry_I", dry_Inertia);
 
       n.getParam("/rocket/dry_CM", dry_CM);
       n.getParam("/rocket/propellant_CM", propellant_CM);
@@ -66,13 +86,16 @@ class Rocket
 
       std::vector<float> diameter = {0, 0, 0};
       std::vector<float> length = {0, 0, 0};
+      
       int nStage;
 
       n.getParam("/rocket/diameters", diameter);
       n.getParam("/rocket/stage_z", length);
       n.getParam("/rocket/stages", nStage);
 
-      surface[0] = diameter[1]*length[nStage-1];
+      total_length = length[nStage-1];
+
+      surface[0] = diameter[1]*total_length;
       surface[1] = surface[0];
       surface[2] = diameter[1]*diameter[1]/4 * 3.14159;
 
@@ -81,14 +104,10 @@ class Rocket
       drag_coeff[1] = 0.5*rho_air*surface[1]*Cd[1];
       drag_coeff[2] = 0.5*rho_air*surface[2]*Cd[2];
 
-      CM_average = 0.5*dry_CM + 0.5*(dry_CM*dry_mass + propellant_CM*propellant_mass)/(dry_mass+propellant_mass); // From tip of nosecone
-      CM_average = length[nStage-1]-CM_average; // From aft of rocket = distance for torque
+      total_Inertia[2] = dry_Inertia[2];
 
-      J_inv[0] = CM_average/I[0];
-      J_inv[1] = CM_average/I[1];
-      J_inv[2] = 1/I[2];
+      update_CM(propellant_mass);
     }
-
 };
 
 Rocket rocket;
@@ -141,7 +160,8 @@ using control_t = Eigen::Matrix<scalar_t, 4, 1>;
 
 void dynamics(const state& x, state& xdot, const double &t)  
 {
-  double g0 = 9.81;  // Earth gravity in [m/s^2]
+  double g0 = 3.986e14/pow(6371e3+x(2), 2);  // Earth gravity in [m/s^2]
+  //std::cout << g0 << "\n";
 
   // -------------- Simulation variables -----------------------------
   double mass = rocket.dry_mass + x(13);                  // Instantaneous mass of the rocket in [kg]
@@ -164,10 +184,13 @@ void dynamics(const state& x, state& xdot, const double &t)
   //std::cout << x.segment(10,3).transpose()*57.29 << "\n\n";
 
   // Tortal torque in body frame
-  Eigen::Matrix<double, 3, 1> I_inv; I_inv << 1/rocket.I[0], 1/rocket.I[1], 1/rocket.I[2]; 
+  Eigen::Matrix<double, 3, 1> I_inv; I_inv << 1/rocket.total_Inertia[0], 1/rocket.total_Inertia[1], 1/rocket.total_Inertia[2]; 
 
   Eigen::Matrix<double, 3, 1> total_torque; 
   total_torque = rocket_control.col(1) + rot_matrix.transpose()*aero_control.col(1);
+
+  // Mass variation is proportional to total thrust
+  float dmdt = -rocket_control.col(0).norm()/(rocket.Isp*g0);
 
   // -------------- Differential equation ---------------------
 
@@ -175,7 +198,7 @@ void dynamics(const state& x, state& xdot, const double &t)
   xdot.head(3) = x.segment(3,3);
 
   // Speed variation is Force/mass
-  xdot.segment(3,3) = total_force/mass;  
+  xdot.segment(3,3) = (total_force + dmdt*x.segment(3,3))/mass;  
 
   // Quaternion variation is 0.5*w◦q
   xdot.segment(6, 4) =  0.5*(omega_quat*attitude).coeffs();
@@ -184,7 +207,7 @@ void dynamics(const state& x, state& xdot, const double &t)
   xdot.segment(10, 3) = rot_matrix*(total_torque.cwiseProduct(I_inv));
 
   // Mass variation is proportional to total thrust
-  xdot(13) = -rocket_control.col(0).norm()/(rocket.Isp*g0);
+  xdot(13) = dmdt;
 }
 
 
@@ -238,7 +261,7 @@ int main(int argc, char **argv)
 
   // Init state X   
   state X0;
-  X0 << 0, 0, 0,   0, 0, 30,     0.0, 0.0 , 0.0 , 1.0 ,      0, 0, 0,    rocket.propellant_mass;
+  X0 << 0, 0, 0,   0, 0, 20,     0.0, 0.0 , 0.0 , 1.0 ,      0, 0, 0,    rocket.propellant_mass;
   state xout = X0;
 
   // Init solver
@@ -249,8 +272,6 @@ int main(int argc, char **argv)
   // Thread to integrate state. Duration defines interval time in seconds
   ros::Timer integrator_thread = n.createTimer(ros::Duration(period_integration), [&](const ros::TimerEvent&) 
 	{
-    double time_now = ros::Time::now().toSec();
-
     // State machine ------------------------------------------
 		if (current_fsm.state_machine.compare("Idle") == 0)
 		{
@@ -273,7 +294,10 @@ int main(int argc, char **argv)
 
       stepper.do_step(dynamics, X0, 0, xout, 0 + period_integration);
       X0 = xout;
-      
+
+      rocket.update_CM(X0(13));
+
+      //std::cout << rocket.total_Inertia[0] << " "  << rocket.total_Inertia[1] << " " << rocket.total_Inertia[2] << "\n";
 
     }
 		

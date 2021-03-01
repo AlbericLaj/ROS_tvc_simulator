@@ -130,8 +130,8 @@ class Simulator3D:
 
 		# Mass properties				
         m = self.rocket.get_empty_mass() + propellant_mass
-        dMdt = -np.linalg.norm(thrust_force)/(self.rocket.get_motor_Isp()*9.81)
-        cg = (self.rocket.get_dry_cg()*self.rocket.get_empty_mass() + self.rocket.get_propellant_cg()*propellant_mass)/m
+        dMdt = np.linalg.norm(thrust_force)/(self.rocket.get_motor_Isp()*9.81)
+        cg = (self.rocket.get_dry_cg()*self.rocket.get_empty_mass() + self.rocket.get_propellant_cg()*propellant_mass)/m #from tip of nosecone
         Sm = self.rocket.get_max_cross_section_surface
         #I = c.transpose().dot(self.rocket.get_rocket_inertia()).dot(c)
         I = c.dot(self.rocket.get_rocket_inertia()).dot(c.transpose())
@@ -244,7 +244,7 @@ class Simulator3D:
 
 				# Mass properties				
         m = self.rocket.get_empty_mass() + propellant_mass
-        dMdt = -np.linalg.norm(thrust_force)/(self.rocket.get_motor_Isp()*9.81)
+        dMdt = np.linalg.norm(thrust_force)/(self.rocket.get_motor_Isp()*9.81)
         cg = (self.rocket.get_dry_cg()*self.rocket.get_empty_mass() + self.rocket.get_propellant_cg()*propellant_mass)/m
         Sm = self.rocket.get_max_cross_section_surface
         #I = c.transpose().dot(self.rocket.get_rocket_inertia()).dot(c)
@@ -348,7 +348,7 @@ class Simulator3D:
         q_dot = quat_evolve(q, w)
         w_dot = np.linalg.lstsq(I, m_tot, rcond=None)[0]
 
-        S_dot = np.concatenate((X_dot, V_dot, q_dot, w_dot, np.array([dMdt])))
+        S_dot = np.concatenate((X_dot, V_dot, q_dot, w_dot, np.array([-dMdt])))
 
         self.rocket.set_sensor_data(V_dot, w, x[2], c)
 

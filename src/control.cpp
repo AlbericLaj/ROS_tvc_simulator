@@ -48,20 +48,38 @@ class Rocket
 
     std::vector<float> maxThrust{0, 0, 0};
     std::vector<float> minThrust{0, 0, 0};
+
     float dry_CM;
     float propellant_CM;
+    float total_CM; // Current Cm of rocket, in real time
 
-    float CM_average;
+    float total_length;
 
     std::vector<float> target_apogee = {0, 0, 0};
     std::vector<float> Cd = {0, 0, 0};
     std::vector<float> surface = {0, 0, 0};
     std::vector<float> drag_coeff = {0, 0, 0};
     
-    std::vector<float> I{0, 0, 0};
+    std::vector<float> dry_Inertia{0, 0, 0};
+    std::vector<float> total_Inertia{0, 0, 0};
+
     std::vector<float> J_inv{0, 0, 0};
 
-  //Rocket();
+
+    void update_CM( float current_prop_mass)
+    {
+      total_CM = total_length - (dry_CM*dry_mass + propellant_CM*current_prop_mass)/(dry_mass+current_prop_mass) ; // From aft of rocket
+
+      float new_inertia = dry_Inertia[0] + pow(total_CM-(total_length-propellant_CM), 2)*current_prop_mass;
+
+      total_Inertia[0] = new_inertia;
+      total_Inertia[1] = new_inertia;
+
+      J_inv[0] = total_CM/total_Inertia[0];
+      J_inv[1] = total_CM/total_Inertia[1];
+      J_inv[2] = 1/total_Inertia[2];
+    }
+
 
     void init(ros::NodeHandle n)
     {
@@ -75,7 +93,7 @@ class Rocket
       n.getParam("/rocket/propellant_mass", propellant_mass);
       
       n.getParam("/rocket/Cd", Cd);
-      n.getParam("/rocket/dry_I", I);
+      n.getParam("/rocket/dry_I", dry_Inertia);
 
       n.getParam("/rocket/dry_CM", dry_CM);
       n.getParam("/rocket/propellant_CM", propellant_CM);
@@ -84,13 +102,16 @@ class Rocket
 
       std::vector<float> diameter = {0, 0, 0};
       std::vector<float> length = {0, 0, 0};
+      
       int nStage;
 
       n.getParam("/rocket/diameters", diameter);
       n.getParam("/rocket/stage_z", length);
       n.getParam("/rocket/stages", nStage);
 
-      surface[0] = diameter[1]*length[nStage-1];
+      total_length = length[nStage-1];
+
+      surface[0] = diameter[1]*total_length;
       surface[1] = surface[0];
       surface[2] = diameter[1]*diameter[1]/4 * 3.14159;
 
@@ -99,14 +120,10 @@ class Rocket
       drag_coeff[1] = 0.5*rho_air*surface[1]*Cd[1];
       drag_coeff[2] = 0.5*rho_air*surface[2]*Cd[2];
 
-      CM_average = 0.5*dry_CM + 0.5*(dry_CM*dry_mass + propellant_CM*propellant_mass)/(dry_mass+propellant_mass); // From tip of nosecone
-      CM_average = length[nStage-1]-CM_average; // From aft of rocket = distance for torque
+      total_Inertia[2] = dry_Inertia[2];
 
-      J_inv[0] = CM_average/I[0];
-      J_inv[1] = CM_average/I[1];
-      J_inv[2] = 1/I[2];
+      update_CM(propellant_mass);
     }
-
 };
 
 Rocket rocket;
@@ -542,6 +559,7 @@ int main(int argc, char **argv)
 							current_state.propeller_mass;
 
       mpc.initial_conditions(x0);
+      rocket.update_CM(x0(13));
 
 		  // Solve problem and save solution
 			double time_now = ros::Time::now().toSec();
@@ -562,8 +580,8 @@ int main(int argc, char **argv)
 
       // Simple P controller. Thrust in z is used to reach apogee, Thrust in x and y is used to keep vertical orientation
 			thrust_force.z = (target_point(2) - current_state.pose.position.z)*100;
-      thrust_force.x = -current_state.pose.orientation.x*900/rocket.CM_average;
-      thrust_force.y = -current_state.pose.orientation.y*900/rocket.CM_average;
+      thrust_force.x = -current_state.pose.orientation.x*900/rocket.total_CM;
+      thrust_force.y = -current_state.pose.orientation.y*900/rocket.total_CM;
 
       // Apply MPC control
 			thrust_force.x = input[0];
@@ -582,8 +600,8 @@ int main(int argc, char **argv)
       if(thrust_force.y < rocket.minThrust[1]) thrust_force.y = rocket.maxThrust[1];
 
       // Torque in X and Y is defined by thrust in X and Y. Torque in Z is free variable
-      thrust_torque.x = thrust_force.x*rocket.CM_average; 
-      thrust_torque.y = thrust_force.y*rocket.CM_average;
+      thrust_torque.x = thrust_force.x*rocket.total_CM; 
+      thrust_torque.y = thrust_force.y*rocket.total_CM;
 
 			control_law.force = thrust_force;
 			control_law.torque = thrust_torque;
