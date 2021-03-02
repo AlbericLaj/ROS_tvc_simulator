@@ -160,10 +160,9 @@ using control_t = Eigen::Matrix<scalar_t, 4, 1>;
 
 void dynamics(const state& x, state& xdot, const double &t)  
 {
-  double g0 = 3.986e14/pow(6371e3+x(2), 2);  // Earth gravity in [m/s^2]
-  //std::cout << g0 << "\n";
-
   // -------------- Simulation variables -----------------------------
+  double g0 = 3.986e14/pow(6371e3+x(2), 2);  // Earth gravity in [m/s^2]
+
   double mass = rocket.dry_mass + x(13);                  // Instantaneous mass of the rocket in [kg]
 
   // Orientation of the rocket with quaternion
@@ -189,16 +188,13 @@ void dynamics(const state& x, state& xdot, const double &t)
   Eigen::Matrix<double, 3, 1> total_torque; 
   total_torque = rocket_control.col(1) + rot_matrix.transpose()*aero_control.col(1);
 
-  // Mass variation is proportional to total thrust
-  float dmdt = -rocket_control.col(0).norm()/(rocket.Isp*g0);
-
   // -------------- Differential equation ---------------------
 
   // Position variation is speed
   xdot.head(3) = x.segment(3,3);
 
   // Speed variation is Force/mass
-  xdot.segment(3,3) = (total_force + dmdt*x.segment(3,3))/mass;  
+  xdot.segment(3,3) = total_force/mass;  
 
   // Quaternion variation is 0.5*w◦q
   xdot.segment(6, 4) =  0.5*(omega_quat*attitude).coeffs();
@@ -207,7 +203,7 @@ void dynamics(const state& x, state& xdot, const double &t)
   xdot.segment(10, 3) = rot_matrix*(total_torque.cwiseProduct(I_inv));
 
   // Mass variation is proportional to total thrust
-  xdot(13) = dmdt;
+  xdot(13) = -rocket_control.col(0).norm()/(rocket.Isp*g0);
 }
 
 
