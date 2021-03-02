@@ -39,6 +39,8 @@ class Rocket
 
     float total_length;
 
+    float initial_speed;
+
     std::vector<float> target_apogee = {0, 0, 0};
     std::vector<float> Cd = {0, 0, 0};
     std::vector<float> surface = {0, 0, 0};
@@ -83,6 +85,8 @@ class Rocket
       n.getParam("/rocket/propellant_CM", propellant_CM);
 
       n.getParam("/environment/apogee", target_apogee);
+
+      n.getParam("/rocket/initial_speed", initial_speed);
 
       std::vector<float> diameter = {0, 0, 0};
       std::vector<float> length = {0, 0, 0};
@@ -203,7 +207,12 @@ void dynamics(const state& x, state& xdot, const double &t)
   xdot.segment(10, 3) = rot_matrix*(total_torque.cwiseProduct(I_inv));
 
   // Mass variation is proportional to total thrust
-  xdot(13) = -rocket_control.col(0).norm()/(rocket.Isp*g0);
+  if(rocket.Isp != -1){
+      xdot(13) = -rocket_control.col(0).norm()/(rocket.Isp*g0);
+  }
+  else{
+      xdot(13) = 0;
+  }
 }
 
 
@@ -257,7 +266,7 @@ int main(int argc, char **argv)
 
   // Init state X   
   state X0;
-  X0 << 0, 0, 0,   0, 0, 20,     0.0, 0.0 , 0.0 , 1.0 ,      0, 0, 0,    rocket.propellant_mass;
+  X0 << 0, 0, 0,   0, 0, rocket.initial_speed,     0.0, 0.0 , 0.0 , 1.0 ,      0, 0, 0,    rocket.propellant_mass;
   state xout = X0;
 
   // Init solver

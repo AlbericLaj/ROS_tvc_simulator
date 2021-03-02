@@ -5,31 +5,32 @@
 #include "tvc_simulator/DroneState.h"
 #include "tvc_simulator/Control.h"
 
-#include "utils/helpers.hpp"
+#include "../../../submodule/polympc/src/utils/helpers.hpp"
 
 using namespace Eigen;
 
-
 ros::Publisher control_pub, drone_state_pub;
 
-void publishConvertedControl(const tvc_simulator::DroneControl::ConstPtr &drone_control) {
-    Eigen::Vector3d thrust_minus_z(0, 0, drone_control->thrust);
+float CM_to_thrust_distance = 0.4;
 
-    //quaternion representing the rotation of the servos around the Y-axis following by the rotation around the X-axis
+void publishConvertedControl(const tvc_simulator::DroneControl::ConstPtr &drone_control) {
+    Eigen::Vector3d thrust_vertical(0, 0, drone_control->thrust);
+
+    //quaternion representing the rotation of the servos around the Y-axis followed by the rotation around the X-axis
     Eigen::Quaterniond thrust_rotation(
             AngleAxisd(drone_control->servo1, Vector3d::UnitX()) *
             AngleAxisd(drone_control->servo2, Vector3d::UnitY())
     );
 
     //rotated thrust vector, in body frame
-    Eigen::Vector3d thrust_vector = thrust_rotation._transformVector(thrust_minus_z);
+    Eigen::Vector3d thrust_vector = thrust_rotation._transformVector(thrust_vertical);
 
 
-    //compute the force and torque and the center of mass and publish them
+    //compute the force and torque at the center of mass and publish them
     tvc_simulator::Control converted_control;
 
-    converted_control.torque.x = thrust_vector.x() * 0.4;
-    converted_control.torque.y = thrust_vector.y() * 0.4;
+    converted_control.torque.x = thrust_vector.x() * CM_to_thrust_distance;
+    converted_control.torque.y = thrust_vector.y() * CM_to_thrust_distance;
     converted_control.torque.z = drone_control->torque;
 
     converted_control.force.x = thrust_vector.x();
@@ -52,6 +53,8 @@ int main(int argc, char **argv) {
     // Init ROS time keeper node
     ros::init(argc, argv, "drone_interface");
     ros::NodeHandle n;
+
+    n.getParam("/rocket/CM_to_thrust_distance", CM_to_thrust_distance);
 
     // Subscribe to drone control
     ros::Subscriber drone_control_sub = n.subscribe("drone_control_pub", 10, publishConvertedControl);

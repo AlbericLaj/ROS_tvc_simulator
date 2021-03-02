@@ -19,8 +19,8 @@
 
   <node name="control" pkg="tvc_simulator" type="drone_control" output ="screen"/>
   <node name="control_interface" pkg="tvc_simulator" type="control_interface" cwd = "node"/>
-  <node name="guidance" pkg="tvc_simulator" type="guidance" output ="screen"  />
-  <node name="integrator" pkg="tvc_simulator" type="integrator.py" cwd = "node" output ="screen"/>
+<!--  <node name="guidance" pkg="tvc_simulator" type="guidance" output ="screen"  />-->
+  <node name="fast_integrator" pkg="tvc_simulator" type="fast_integrator" cwd = "node" output ="screen"/>
   <node name="disturbance" pkg="tvc_simulator" type="disturbance.py" cwd = "node"/>
   <node name="data_fusion" pkg="tvc_simulator" type="data_fusion" cwd = "node"/>
   <node name="time_keeper" pkg="tvc_simulator" type="time_keeper" cwd = "node"/>
