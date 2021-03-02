@@ -35,7 +35,7 @@ time_force = np.zeros((1,1))
 target_positionZ = []
 target_speedZ = []
 target_prop_mass = []
-time_target = []
+time_target = [] 
 thrust_target = []
 
 bag = rosbag.Bag('../log/log.bag')

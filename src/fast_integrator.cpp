@@ -2,6 +2,7 @@
 
 #include "tvc_simulator/FSM.h"
 #include "tvc_simulator/State.h"
+#include "tvc_simulator/Sensor.h"
 
 #include "tvc_simulator/GetFSM.h"
 
@@ -19,7 +20,9 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+
 #include <chrono>
+#include <random>
 
 class Rocket
 {
@@ -48,6 +51,11 @@ class Rocket
     std::vector<float> total_Inertia{0, 0, 0};
 
     std::vector<float> J_inv{0, 0, 0};
+
+    // Sensor data
+    float accX, accY, accZ;
+    float gyroX, gyroY, gyroZ;
+    float baro;
 
 
     void update_CM( float current_prop_mass)
@@ -144,6 +152,31 @@ void fsmCallback(const tvc_simulator::FSM::ConstPtr& fsm)
   current_fsm.state_machine = fsm->state_machine;
 }
 
+void send_fake_sensor(ros::Publisher rocket_sensor_pub)
+{
+  // construct a trivial random generator engine from a time-based seed:
+  unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+  std::default_random_engine generator (seed);
+
+  std::normal_distribution<double> acc_noise (0.0, 0);
+  std::normal_distribution<double> gyro_noise (0.0, 0.0);
+  std::normal_distribution<double> baro_noise (0.0, 0.0);
+
+  tvc_simulator::Sensor sensor_msg;
+
+  sensor_msg.IMU_acc.x = rocket.accX + acc_noise(generator);
+  sensor_msg.IMU_acc.y = rocket.accY + acc_noise(generator);
+  sensor_msg.IMU_acc.z = rocket.accZ + acc_noise(generator);
+
+  sensor_msg.IMU_gyro.x = rocket.gyroX + gyro_noise(generator);
+  sensor_msg.IMU_gyro.y = rocket.gyroY + gyro_noise(generator);
+  sensor_msg.IMU_gyro.z = rocket.gyroZ + gyro_noise(generator);
+
+  sensor_msg.baro_height = rocket.baro + baro_noise(generator);
+
+  rocket_sensor_pub.publish(sensor_msg);
+}
+
 
 using namespace std;
 using namespace boost::numeric::odeint;
@@ -204,6 +237,23 @@ void dynamics(const state& x, state& xdot, const double &t)
 
   // Mass variation is proportional to total thrust
   xdot(13) = -rocket_control.col(0).norm()/(rocket.Isp*g0);
+
+
+  // Fake sensor data update -----------------
+  Eigen::Matrix<double, 3, 1> body_acceleration;
+  body_acceleration = rot_matrix.transpose()*(total_force+gravity)/mass;
+  rocket.accX = body_acceleration(0);
+  rocket.accY = body_acceleration(1);
+  rocket.accZ = body_acceleration(2);
+
+  Eigen::Matrix<double, 3, 1> body_gyroscope;
+  body_gyroscope = rot_matrix.transpose()*x.segment(10,3);
+
+  rocket.gyroX = body_gyroscope(0);
+  rocket.gyroY = body_gyroscope(1);
+  rocket.gyroZ = body_gyroscope(2);
+
+  rocket.baro = x(2);
 }
 
 
@@ -232,6 +282,9 @@ int main(int argc, char **argv)
 
 	// Create fast state publisher
 	ros::Publisher rocket_state_pub = n.advertise<tvc_simulator::State>("rocket_state", 10);
+
+  // Create fake sensors publisher
+	ros::Publisher rocket_sensor_pub = n.advertise<tvc_simulator::Sensor>("sensor_pub", 10);
 
   // Setup Time_keeper client and srv variable for FSM and time synchronization
 	ros::ServiceClient client_fsm = n.serviceClient<tvc_simulator::GetFSM>("getFSM");
@@ -292,6 +345,8 @@ int main(int argc, char **argv)
       X0 = xout;
 
       rocket.update_CM(X0(13));
+
+      send_fake_sensor(rocket_sensor_pub);
 
       //std::cout << rocket.total_Inertia[0] << " "  << rocket.total_Inertia[1] << " " << rocket.total_Inertia[2] << "\n";
 
