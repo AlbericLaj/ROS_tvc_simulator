@@ -117,7 +117,8 @@ def init_integrator():
 
 	Bellalui_2.set_motor_Isp(rocket_data["Isp"])
   
-	US_Atmos = stdAtmosUS(1567, 290.15, 84972.484, 0.51031)
+	US_Atmos = stdAtmosUS(1567, 290.15, 84972.484, 0.51031 )
+	US_Atmos.set_wind( env_data["wind_speed"], 180-env_data["wind_direction"])
   
 	SimObj = Simulator3D(Bellalui_2, US_Atmos)
 	return SimObj
@@ -134,7 +135,7 @@ if __name__ == '__main__':
 	current_state = State()
 
 	# Init ROS
-	rospy.init_node('integrator', anonymous=True)
+	rospy.init_node('aerodynamic', anonymous=True)
 
 	# Init global variable
 	current_fsm.time_now = 0

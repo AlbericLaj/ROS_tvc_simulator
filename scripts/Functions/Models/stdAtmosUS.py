@@ -121,7 +121,7 @@ class stdAtmosUS:
     Rail_Length = 7
     V_Azimuth = 45
     Rail_Azimuth = 181
-    V_dir = np.array([np.cos(V_Azimuth*np.pi/180), np.sin(V_Azimuth*np.pi/180), 0.0])
+    V_dir = np.array([1, 0, 0.0])
 
 
 
@@ -158,6 +158,9 @@ class stdAtmosUS:
         self.p_ws = exp(77.345 + 0.0057 * self.ground_temperature \
                         - 7235 / self.ground_temperature) / self.ground_temperature ** 8.2
         self.saturation_vapor_ratio = 0.62198 * self.p_ws / (self.ground_pressure - self.p_ws)
+
+        
+
 
     # --------------------
     # METHODS
@@ -217,6 +220,12 @@ class stdAtmosUS:
 
     def get_V_inf(self):
         return self.V_inf  # todo : check v_inf /!\ magic number
+
+    def set_wind(self, v_wind_inf: float, azimuth_wind: float):
+        self.V_inf = v_wind_inf
+        self.V_Azimuth = azimuth_wind
+
+        self.V_dir = np.array([np.cos(azimuth_wind*np.pi/180), np.sin(azimuth_wind*np.pi/180), 0.0])
 
 if __name__ == '__main__':
     US_Atmos = stdAtmosUS(1382, 308, 86000, 0.15)

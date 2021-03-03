@@ -20,6 +20,8 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+#include <unsupported/Eigen/EulerAngles>
+
 
 #include <chrono>
 #include <random>
@@ -254,6 +256,8 @@ void dynamics(const state& x, state& xdot, const double &t)
   rocket.gyroZ = body_gyroscope(2);
 
   rocket.baro = x(2);
+
+  std::cout << rot_matrix.transpose() << "\n";
 }
 
 
@@ -308,9 +312,28 @@ int main(int argc, char **argv)
                     0, 0,
                     0, 0;
 
+  using namespace Eigen;
+
+  //Get initial orientation and convert in Radians
+  float roll = 0, zenith = 0, azimuth = 0.0;
+  n.getParam("/environment/rocket_roll", roll);
+  n.getParam("/environment/rail_zenith", zenith);
+  n.getParam("/environment/rail_azimuth", azimuth);
+
+  roll *= 3.14159/180; zenith *= 3.14159/180; azimuth *= 3.14159/180;
+
+  typedef EulerSystem<-EULER_Z, EULER_Y, EULER_Z> Rail_system;
+  typedef EulerAngles<double, Rail_system> angle_type;
+
+  angle_type init_angle(azimuth, zenith, roll);
+
+  Quaterniond q(init_angle);
+
   // Init state X   
   state X0;
-  X0 << 0, 0, 0,   0, 0, 20,     0.0, 0.0 , 0.0 , 1.0 ,      0, 0, 0,    rocket.propellant_mass;
+  X0 << 0, 0, 0,   0, 0, 20,     0.0, 0.0 , 0.0 , 1.0 ,      0, 0, 0.0,    rocket.propellant_mass;
+  X0.segment(6,4) = q.coeffs();
+
   state xout = X0;
 
   // Init solver

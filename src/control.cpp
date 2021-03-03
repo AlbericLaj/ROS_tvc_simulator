@@ -579,15 +579,15 @@ int main(int argc, char **argv)
 
 
       // Simple P controller. Thrust in z is used to reach apogee, Thrust in x and y is used to keep vertical orientation
-			thrust_force.z = (target_point(2) - current_state.pose.position.z)*100;
-      thrust_force.x = -current_state.pose.orientation.x*900/rocket.total_CM;
-      thrust_force.y = -current_state.pose.orientation.y*900/rocket.total_CM;
+			thrust_force.z = 2400;
+      thrust_force.x = 0;
+      thrust_force.y = 0;
 
       // Apply MPC control
-			thrust_force.x = input[0];
-			thrust_force.y = input[1];
-			thrust_force.z = input[2];
-      thrust_torque.z = input[3];
+			//thrust_force.x = input[0];
+			//thrust_force.y = input[1];
+			//thrust_force.z = input[2];
+      //thrust_torque.z = input[3];
 
       // Limit input between min and max
       if(thrust_force.z > rocket.maxThrust[2]) thrust_force.z = rocket.maxThrust[2];
