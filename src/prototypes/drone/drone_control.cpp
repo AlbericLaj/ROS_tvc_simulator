@@ -83,11 +83,19 @@ tvc_simulator::DroneState current_state;
 // Global variable with last requested fsm
 tvc_simulator::FSM current_fsm;
 
+geometry_msgs::Vector3 target_apogee;
+
 // Callback function to store last received state
 void rocket_stateCallback(const tvc_simulator::DroneState::ConstPtr &rocket_state) {
     previous_state = current_state;
     current_state.pose = rocket_state->pose;
     current_state.twist = rocket_state->twist;
+}
+
+
+// Callback function to store last received state
+void targetCallback(const geometry_msgs::Vector3 &target) {
+    target_apogee = target;
 }
 
 
@@ -415,6 +423,9 @@ int main(int argc, char **argv) {
     // Subscribe to state message from simulation
     ros::Subscriber rocket_state_sub = n.subscribe("drone_state", 100, rocket_stateCallback);
 
+    // Subscribe to target apogee message from simulation
+    ros::Subscriber target_sub = n.subscribe("target_apogee", 100, targetCallback);
+
     // Setup Time_keeper client and srv variable for FSM and time synchronization
     ros::ServiceClient client_fsm = n.serviceClient<tvc_simulator::GetFSM>("getFSM");
     tvc_simulator::GetFSM srv_fsm;
@@ -459,8 +470,15 @@ int main(int argc, char **argv) {
 
 
     //TODO change state constraints
-    lbx << -inf, -inf, -1.0 / 100, -inf, -inf, -inf, -0.183 - eps, -0.183 - eps, -0.183 - eps, -1 - eps, -inf, -inf, -inf;
-    ubx << inf, inf, inf, inf, inf, inf, 0.183 + eps, 0.183 + eps, 0.183 + eps, 1 + eps, inf, inf, inf;
+    lbx << -inf, -inf, -1.0 / 100,
+            -inf, -inf, -inf,
+            -0.183 - eps, -0.183 - eps, -0.183 - eps, -1 - eps,
+            -inf, -inf, -inf;
+
+    ubx << inf, inf, inf,
+            inf, inf, inf,
+            0.183 + eps, 0.183 + eps, 0.183 + eps, 1 + eps,
+            inf, inf, inf;
 
 //    lbx << -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf;
 //    ubx << inf, inf, inf, inf, inf, inf, inf, inf, inf, inf, inf, inf, inf;
@@ -475,12 +493,21 @@ int main(int argc, char **argv) {
             0, 0, 0;
     mpc.x_guess(x0.replicate(13, 1));
 
+    mpc_t::control_t target_control;
+    target_control << 0, 0, 0, 0;
+
+    mpc_t::state_t target_state;
+    target_state << 0, 4.0 / 100, 10.0 / 100,
+            0, 0, 0,
+            0, 0, 0, 1,
+            0, 0, 0;
+
     // Variables to track performance over whole simulation
     std::vector<float> average_time;
     std::vector<int> average_status;
 
     // Thread to compute control. Duration defines interval time in seconds
-    ros::Timer control_thread = n.createTimer(ros::Duration(0.04), [&](const ros::TimerEvent &) {
+    ros::Timer control_thread = n.createTimer(ros::Duration(0.05), [&](const ros::TimerEvent &) {
 
         // Get current FSM and time
         if (client_fsm.call(srv_fsm)) {
@@ -491,19 +518,16 @@ int main(int argc, char **argv) {
         mpc_t::traj_state_t x_init;
         mpc_t::traj_control_t u_init;
 
-        mpc_t::control_t target_control;
-        target_control << 0, 0, 0, 0;
-
-        mpc_t::state_t target_point;
-        target_point << 0, 4.0 / 100, 10.0 / 100,
-                0, 0, 0,
-                0, 0, 0, 1,
-                0, 0, 0;
 
         //TODO warm start
 //        mpc.u_guess(u_init);
 //        mpc.x_guess(x_init);
-        mpc.ocp().xs << target_point; // last trajectory point is also our target
+        target_state << target_apogee.x * 1e-2, target_apogee.y * 1e-2, target_apogee.z * 1e-2,
+                0, 0, 0,
+                0, 0, 0, 1,
+                0, 0, 0;
+
+        mpc.ocp().xs << target_state; // last trajectory point is also our target
         mpc.ocp().us << target_control;
 
         // State machine ------------------------------------------
@@ -535,10 +559,9 @@ int main(int argc, char **argv) {
             Eigen::Matrix<double, 4, 1> input = convertControl_SI(control_MPC);
             //ROS_INFO("Fx: %f, Fy: %f, Fz: %f, Mx: %f \n",  input[0], input[1], input[2], input[3]);
 
-            if(USE_PD_CONTROLLER){
+            if (USE_PD_CONTROLLER) {
                 set_PD_control_law(control_law);
-            }
-            else{
+            } else {
                 // Apply MPC control
                 control_law.servo1 = input[0];
                 control_law.servo2 = input[1];
