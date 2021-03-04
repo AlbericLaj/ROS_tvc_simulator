@@ -100,7 +100,7 @@ void targetCallback(const geometry_msgs::Vector3 &target) {
 
 
 template<typename T>
-inline void unScaleControl(Eigen::Matrix<T, 4, 1>& u) {
+inline void unScaleControl(Eigen::Matrix<T, 4, 1> &u) {
     u(0) = rocket.maxServo1Angle * u(0);
     u(1) = rocket.maxServo1Angle * u(1);
     u(2) = 0.5 * (u(2) + 1) * (rocket.maxThrust - rocket.minThrust) + rocket.minThrust;
@@ -435,6 +435,10 @@ int main(int argc, char **argv) {
     ros::ServiceClient client_fsm = n.serviceClient<tvc_simulator::GetFSM>("getFSM");
     tvc_simulator::GetFSM srv_fsm;
 
+    // Setup Waypoint client and srv variable for trajectory following
+    ros::ServiceClient client_waypoint = n.serviceClient<tvc_simulator::GetWaypoint>("getWaypoint");
+    tvc_simulator::GetWaypoint srv_waypoint;
+
     // Initialize control
     tvc_simulator::DroneControl control_law;
     geometry_msgs::Vector3 thrust_force;
@@ -510,9 +514,12 @@ int main(int argc, char **argv) {
     // Variables to track performance over whole simulation
     std::vector<float> average_time;
     std::vector<int> average_status;
+    std::vector<double> average_x_error;
+    std::vector<double> average_y_error;
+    std::vector<double> average_z_error;
 
     // Thread to compute control. Duration defines interval time in seconds
-    ros::Timer control_thread = n.createTimer(ros::Duration(0.04), [&](const ros::TimerEvent &) {
+    ros::Timer control_thread = n.createTimer(ros::Duration(0.05), [&](const ros::TimerEvent &) {
 
         // Get current FSM and time
         if (client_fsm.call(srv_fsm)) {
@@ -527,12 +534,24 @@ int main(int argc, char **argv) {
         //TODO warm start
 //        mpc.u_guess(u_init);
 //        mpc.x_guess(x_init);
-        target_state << target_apogee.x * 1e-2, target_apogee.y * 1e-2, target_apogee.z * 1e-2,
-                0, 0, 0,
-                0, 0, 0, 1,
-                0, 0, 0;
 
-        mpc.ocp().xs << target_state; // last trajectory point is also our target
+        if (client_waypoint.call(srv_waypoint)) {
+            target_state << srv_waypoint.response.target_point.position.x * 1e-2, srv_waypoint.response.target_point.position.y * 1e-2, srv_waypoint.response.target_point.position.z * 1e-2,
+                    srv_waypoint.response.target_point.speed.x * 1e-2, srv_waypoint.response.target_point.speed.y * 1e-2, srv_waypoint.response.target_point.speed.z * 1e-2,
+                    current_state.pose.orientation.x, current_state.pose.orientation.y, current_state.pose.orientation.z,current_state.pose.orientation.w,
+                    current_state.twist.angular.x, current_state.twist.angular.y, current_state.twist.angular.z;
+
+            //TODO
+            target_control <<  0, 0, 0, 0;
+        } else {
+            target_state << target_apogee.x * 1e-2, target_apogee.y * 1e-2, target_apogee.z * 1e-2,
+                    0, 0, 0,
+                    0, 0, 0, 1,
+                    0, 0, 0;
+            target_control << 0, 0, 0, 0;
+        }
+
+        mpc.ocp().xs << target_state;
         mpc.ocp().us << target_control;
 
         // State machine ------------------------------------------
@@ -553,7 +572,7 @@ int main(int argc, char **argv) {
             mpc.solve();
             time_now = 1000 * (ros::Time::now().toSec() - time_now);
 
-            ROS_INFO("Ctr T= %.2f ms, st: %d, iter: %d", time_now, mpc.info().status.value, mpc.info().iter);
+//            ROS_INFO("Ctr T= %.2f ms, st: %d, iter: %d", time_now, mpc.info().status.value, mpc.info().iter);
             average_status.push_back(mpc.info().status.value);
             average_time.push_back(time_now);
 
@@ -562,9 +581,11 @@ int main(int argc, char **argv) {
             control_MPC = mpc.solution_u_at(0);
 
             unScaleControl(control_MPC);
-            ROS_INFO("servo1: %f, servo2: %f, Fz: %f, Mx: %f \n",  control_MPC[0], control_MPC[1], control_MPC[2], control_MPC[3]);
+//            ROS_INFO("servo1: %f, servo2: %f, Fz: %f, Mx: %f \n", control_MPC[0], control_MPC[1], control_MPC[2],
+//                     control_MPC[3]);
 
-            if (USE_PD_CONTROLLER || abs(control_MPC[0]) > 100  || abs(control_MPC[1]) > 100  || abs(control_MPC[2]) > 100  || abs(control_MPC[3]) > 100) {
+            if (USE_PD_CONTROLLER || abs(control_MPC[0]) > 100 || abs(control_MPC[1]) > 100 ||
+                abs(control_MPC[2]) > 100 || abs(control_MPC[3]) > 100) {
                 ROS_INFO("MPC ISSUE, SWITCHED TO PD LAW \n");
                 set_PD_control_law(control_law);
 
@@ -596,6 +617,13 @@ int main(int argc, char **argv) {
                 trajectory_msg.trajectory.push_back(point);
             }
 
+            double x_error = current_state.pose.position.x - target_state(0)*100;
+            average_x_error.push_back(x_error*x_error);
+            double y_error = current_state.pose.position.y - target_state(1)*100;
+            average_y_error.push_back(y_error*y_error);
+            double z_error = current_state.pose.position.z - target_state(2)*100;
+            average_z_error.push_back(z_error*z_error);
+
             MPC_horizon_pub.publish(trajectory_msg);
 
         } else if (current_fsm.state_machine.compare("Coast") == 0) {
@@ -608,8 +636,12 @@ int main(int argc, char **argv) {
             control_law.torque = 0;
             std::cout << "Average time: "
                       << (std::accumulate(average_time.begin(), average_time.end(), 0.0)) / average_time.size()
-                      << "ms | Average status: "
-                      << (std::accumulate(average_status.begin(), average_status.end(), 0.0)) / average_status.size()
+                      << "ms | Average error (x, y, z): "
+                      << (std::accumulate(average_x_error.begin(), average_x_error.end(), 0.0)) / average_z_error.size()
+                      << ", "
+                      << (std::accumulate(average_y_error.begin(), average_y_error.end(), 0.0)) / average_z_error.size()
+                      << ", "
+                      << (std::accumulate(average_z_error.begin(), average_z_error.end(), 0.0)) / average_z_error.size()
                       << "\n";
         }
 

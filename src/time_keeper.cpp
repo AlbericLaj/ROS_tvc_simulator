@@ -32,7 +32,7 @@ bool sendFSM(tvc_simulator::GetFSM::Request &req, tvc_simulator::GetFSM::Respons
 	res.fsm.time_now = current_fsm.time_now;
 	res.fsm.state_machine = current_fsm.state_machine;
 
-	ROS_INFO("Request info: State = %s, time = %f", current_fsm.state_machine.c_str(), current_fsm.time_now);
+//	ROS_INFO("Request info: State = %s, time = %f", current_fsm.state_machine.c_str(), current_fsm.time_now);
 	
 	return true;
 }
@@ -42,6 +42,9 @@ void processCommand(const std_msgs::String &command){
     time_zero = ros::Time::now().toSec();
     if(command.data.compare("Launch") == 0){
         //TODO ?
+    }
+    else if(command.data.compare("Coast") == 0){
+        current_fsm.state_machine = "Coast";
     }
 }
 

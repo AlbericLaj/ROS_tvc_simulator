@@ -253,14 +253,6 @@ add_executable(control src/control.cpp)
 target_link_libraries(control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
 add_dependencies(control ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
-add_executable(drone_control src/prototypes/drone/drone_control.cpp)
-target_link_libraries(drone_control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
-add_dependencies(drone_control ${${PROJECT_NAME}_EXPORTED_TARGETS})
-
-add_executable(control_interface src/prototypes/drone/drone_interface.cpp)
-target_link_libraries(control_interface Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
-add_dependencies(control_interface ${${PROJECT_NAME}_EXPORTED_TARGETS})
-
 add_executable(guidance src/guidance.cpp)
 target_link_libraries(guidance Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
 add_dependencies(guidance ${${PROJECT_NAME}_EXPORTED_TARGETS})
@@ -276,4 +268,17 @@ add_dependencies(fast_integrator ${${PROJECT_NAME}_EXPORTED_TARGETS})
 add_executable(visualization src/visualization.cpp)
 target_link_libraries(visualization ${catkin_LIBRARIES})
 add_dependencies(visualization ${${PROJECT_NAME}_EXPORTED_TARGETS})
+
+
+add_executable(drone_control src/prototypes/drone/drone_control.cpp)
+target_link_libraries(drone_control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
+add_dependencies(drone_control ${${PROJECT_NAME}_EXPORTED_TARGETS})
+
+add_executable(drone_guidance src/prototypes/drone/drone_guidance.cpp)
+target_link_libraries(drone_guidance Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
+add_dependencies(drone_guidance ${${PROJECT_NAME}_EXPORTED_TARGETS})
+
+add_executable(control_interface src/prototypes/drone/drone_interface.cpp)
+target_link_libraries(control_interface Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
+add_dependencies(control_interface ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
