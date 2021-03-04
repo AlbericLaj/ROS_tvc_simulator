@@ -15,7 +15,7 @@
 #include <sstream>
 #include <string>
 
-#define CONTROL_HORIZON 5// In seconds
+#define CONTROL_HORIZON 3// In seconds
 
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
@@ -99,17 +99,13 @@ void targetCallback(const geometry_msgs::Vector3 &target) {
 }
 
 
-Eigen::Matrix<double, 4, 1> convertControl_SI(const Eigen::Matrix<double, 4, 1> &u) {
-    Eigen::Matrix<double, 4, 1> input;
-    input << rocket.maxServo1Angle * u(0),
-            rocket.maxServo2Angle * u(1),
-            0.5 * (u(2) + 1) * (rocket.maxThrust - rocket.minThrust) + rocket.minThrust,
-            rocket.maxTorque * u(3);
-
-    return input;
+template<typename T>
+inline void unScaleControl(Eigen::Matrix<T, 4, 1>& u) {
+    u(0) = rocket.maxServo1Angle * u(0);
+    u(1) = rocket.maxServo1Angle * u(1);
+    u(2) = 0.5 * (u(2) + 1) * (rocket.maxThrust - rocket.minThrust) + rocket.minThrust;
+    u(3) = rocket.maxTorque * u(3);
 }
-
-
 
 // Poly MPC stuff ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -142,6 +138,9 @@ POLYMPC_FORWARD_DECLARATION(/*Name*/ control_ocp, /*NX*/ 13, /*NU*/ 4, /*NP*/ 0,
 #define ATT_COST 1e0
 #define D_ATT_COST 1e-1
 
+#define SERVO_COST 10000
+#define THRUST_COST 100
+#define TORQUE_COST 1
 
 class control_ocp : public ContinuousOCP<control_ocp, Approximation, SPARSE> {
 public:
@@ -152,23 +151,20 @@ public:
 
     Eigen::DiagonalMatrix<scalar_t, 13> Q{X_COST, X_COST, X_COST, D_X_COST, D_X_COST, D_X_COST, ATT_COST, ATT_COST,
                                           ATT_COST, ATT_COST, D_ATT_COST, D_ATT_COST, D_ATT_COST};
-    Eigen::DiagonalMatrix<scalar_t, 4> R{0.01, 0.01, 100, 1};
+    Eigen::DiagonalMatrix<scalar_t, 4> R{SERVO_COST, SERVO_COST, THRUST_COST, TORQUE_COST};
     Eigen::DiagonalMatrix<scalar_t, 13> QN{X_COST, X_COST, X_COST, D_X_COST, D_X_COST, D_X_COST, ATT_COST, ATT_COST,
                                            ATT_COST, ATT_COST, D_ATT_COST, D_ATT_COST, D_ATT_COST};
 
     Eigen::Matrix<scalar_t, 13, 1> xs;
-    Eigen::Matrix<scalar_t, 4, 1> us{0.0, 0.0, 0, 0.0};
+    Eigen::Matrix<scalar_t, 4, 1> us;
 
     template<typename T>
     inline void dynamics_impl(const Eigen::Ref<const state_t <T>> x, const Eigen::Ref<const control_t <T>> u,
                               const Eigen::Ref<const parameter_t <T>> p, const Eigen::Ref<const static_parameter_t> &d,
                               const T &t, Eigen::Ref <state_t<T>> xdot) const noexcept {
         Eigen::Matrix<T, 4, 1> input;
-
-        input << rocket.maxServo1Angle * u(0),
-                rocket.maxServo2Angle * u(1),
-                0.5 * (u(2) + 1) * (rocket.maxThrust - rocket.minThrust) + rocket.minThrust,
-                rocket.maxTorque * u(3);
+        input << u(0), u(1), u(2), u(3);
+        unScaleControl(input);
 
         // -------------- Simulation parameters -------------- -------------
         T g0 = (T) 9.81;                             // Earth gravity in [m/s^2]
@@ -220,6 +216,15 @@ public:
         xdot.segment(10, 3) = rot_matrix * (rocket_torque.cwiseProduct(J_inv));
 
     }
+
+//    template<typename T>
+//    inline void inequality_constraints_impl(const state_t<T> &x, const control_t<T> &u, const parameter_t<T> &p,
+//                                                    const static_parameter_t &d, const scalar_t &t, constraint_t<T> &g) const noexcept {
+//        // w = x(9); x = x(6);y = x(7), x(8))
+//        // (w^2 + z^2)*(x^2 + y^2) corresponds to the inclination relative to (0, 0, 1)
+//        g.head(1) = (x(9)^2 + x(8)^2)*(x(6)^2 + x(7)^2) - (T) 0.0;
+//    }
+
 
     template<typename T>
     inline void lagrange_term_impl(const Eigen::Ref<const state_t <T>> x, const Eigen::Ref<const control_t <T>> u,
@@ -447,8 +452,8 @@ int main(int argc, char **argv) {
     using mpc_t = MPC<control_ocp, MySolver, osqp_solver_t>;
     mpc_t mpc;
 
-    mpc.settings().max_iter = 8;
-    mpc.settings().line_search_max_iter = 10;
+    mpc.settings().max_iter = 6;
+    mpc.settings().line_search_max_iter = 5;
 
     // Input constraints
     const double inf = std::numeric_limits<double>::infinity();
@@ -507,7 +512,7 @@ int main(int argc, char **argv) {
     std::vector<int> average_status;
 
     // Thread to compute control. Duration defines interval time in seconds
-    ros::Timer control_thread = n.createTimer(ros::Duration(0.05), [&](const ros::TimerEvent &) {
+    ros::Timer control_thread = n.createTimer(ros::Duration(0.04), [&](const ros::TimerEvent &) {
 
         // Get current FSM and time
         if (client_fsm.call(srv_fsm)) {
@@ -556,17 +561,22 @@ int main(int argc, char **argv) {
             Eigen::Matrix<double, 4, 1> control_MPC;
             control_MPC = mpc.solution_u_at(0);
 
-            Eigen::Matrix<double, 4, 1> input = convertControl_SI(control_MPC);
-            //ROS_INFO("Fx: %f, Fy: %f, Fz: %f, Mx: %f \n",  input[0], input[1], input[2], input[3]);
+            unScaleControl(control_MPC);
+            ROS_INFO("servo1: %f, servo2: %f, Fz: %f, Mx: %f \n",  control_MPC[0], control_MPC[1], control_MPC[2], control_MPC[3]);
 
-            if (USE_PD_CONTROLLER) {
+            if (USE_PD_CONTROLLER || abs(control_MPC[0]) > 100  || abs(control_MPC[1]) > 100  || abs(control_MPC[2]) > 100  || abs(control_MPC[3]) > 100) {
+                ROS_INFO("MPC ISSUE, SWITCHED TO PD LAW \n");
                 set_PD_control_law(control_law);
+
+                //reset mpc guess
+                mpc.x_guess(x0.replicate(13, 1));
+                mpc.u_guess(target_control.replicate(13, 1));
             } else {
                 // Apply MPC control
-                control_law.servo1 = input[0];
-                control_law.servo2 = input[1];
-                control_law.thrust = input[2];
-                control_law.torque = input[3];
+                control_law.servo1 = control_MPC[0];
+                control_law.servo2 = control_MPC[1];
+                control_law.thrust = control_MPC[2];
+                control_law.torque = control_MPC[3];
             }
 
 

@@ -30,11 +30,11 @@ propellant_mass: 0.00001
 propellant_CM: 0.1
 #set Isp to -1 for constant propellant mass
 Isp: -1
-maxThrust: 30
+maxThrust: 25
 minThrust: 0
-maxTorque: 10
-maxServo1Angle: 0.8
-maxServo2Angle: 0.8
+maxTorque: 2
+maxServo1Angle: 0.3
+maxServo2Angle: 0.3
 CM_to_thrust_distance: 0.4
 Cd:
   - 2
