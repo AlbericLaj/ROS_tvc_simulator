@@ -189,14 +189,12 @@ class Simulator3D:
         else:
             n = 0.5 * rho * Sm * CNa * alpha * v_mag ** 2 * na/ (np.linalg.norm(na)+0.05) # --> constant added to avoid division by small number
 
-
         # Drag
         # Drag coefficient
         cd = drag(self.rocket, alpha, v_mag, nu, a)*self.rocket.CD_fac  # !!! take 3000 us !!! -> actually half of the computation time
         
         # Drag force
         d = -0.5 * rho * Sm * cd * v_mag ** 2 * v_norm
-
 
         # Moment estimation ------------------------
 

@@ -193,7 +193,7 @@ using state = state_t<double>;
 template<typename scalar_t>
 using control_t = Eigen::Matrix<scalar_t, 4, 1>;
 
-void dynamics(const state& x, state& xdot, const double &t)  
+void dynamics_flight(const state& x, state& xdot, const double &t)  
 {
   // -------------- Simulation variables -----------------------------
   double g0 = 3.986e14/pow(6371e3+x(2), 2);  // Earth gravity in [m/s^2]
@@ -256,11 +256,64 @@ void dynamics(const state& x, state& xdot, const double &t)
   rocket.gyroZ = body_gyroscope(2);
 
   rocket.baro = x(2);
+  }
 
-  std::cout << rot_matrix.transpose() << "\n";
+
+void dynamics_rail(const state& x, state& xdot, const double &t)  
+{
+  // -------------- Simulation variables -----------------------------
+  double g0 = 3.986e14/pow(6371e3+x(2), 2);  // Earth gravity in [m/s^2]
+
+  double mass = rocket.dry_mass + x(13);     // Instantaneous mass of the rocket in [kg]
+
+  // Orientation of the rocket with quaternion
+  Eigen::Quaternion<double> attitude( x(9), x(6), x(7), x(8)); attitude.normalize();
+  Eigen::Matrix<double, 3, 3> rot_matrix = attitude.toRotationMatrix();
+
+  // Force in inertial frame: gravity
+  Eigen::Matrix<double, 3, 1> gravity; gravity << 0, 0, g0*mass;
+
+  // Total force in initial body frame [N] (rail frame)
+  Eigen::Matrix<double, 3, 1> total_force;  total_force = rocket_control.col(0) - rot_matrix.transpose()*(gravity + aero_control.col(0));
+
+  Eigen::Matrix<double, 3, 1> body_acceleration;
+
+  total_force.head(2) << 0.0, 0.0; // Zero force on axes perpendicular to rail to force rocket to stay on rail
+  //std::cout << total_force << "\n";
+
+
+  // Angular velocity omega in quaternion format to compute quaternion derivative
+  Eigen::Quaternion<double> omega_quat(0.0, x(10), x(11), x(12));
+
+  // -------------- Differential equation ---------------------
+
+  // Position variation is speed
+  xdot.head(3) = x.segment(3,3);
+
+  // Speed variation is Force/mass
+  xdot.segment(3,3) = rot_matrix*total_force/mass;  
+
+  // Quaternion variation is zero to keep rail orientation
+  xdot.segment(6, 4) << 0.5*(omega_quat*attitude).coeffs();
+
+  // Angular speed variation is zero to keep rail orientation
+  xdot.segment(10, 3) << 0.0, 0.0, 0.0;
+
+  // Mass variation is proportional to total thrust
+  xdot(13) = -rocket_control.col(0).norm()/(rocket.Isp*g0);
+
+  // Fake sensor data update -----------------
+  body_acceleration = (total_force + rot_matrix.transpose()*gravity)/mass; // Here gravity is measured by the accelerometer because of the rail's reaction force
+  rocket.accX = body_acceleration(0);
+  rocket.accY = body_acceleration(1);
+  rocket.accZ = body_acceleration(2);
+
+  rocket.gyroX = 0.0;
+  rocket.gyroY = 0.0;
+  rocket.gyroZ = 0.0;
+
+  rocket.baro = x(2);
 }
-
-
 
 
 typedef runge_kutta_dopri5< double > stepper_type;
@@ -331,7 +384,7 @@ int main(int argc, char **argv)
 
   // Init state X   
   state X0;
-  X0 << 0, 0, 0,   0, 0, 20,     0.0, 0.0 , 0.0 , 1.0 ,      0, 0, 0.0,    rocket.propellant_mass;
+  X0 << 0, 0, 0,   0, 0, 0,     0.0, 0.0 , 0.0 , 1.0 ,      0, 0, 0.0,    rocket.propellant_mass;
   X0.segment(6,4) = q.coeffs();
 
   state xout = X0;
@@ -339,7 +392,6 @@ int main(int argc, char **argv)
   // Init solver
   float period_integration = 10e-3; 
   stepper_type2 stepper;     
-
 
   // Thread to integrate state. Duration defines interval time in seconds
   ros::Timer integrator_thread = n.createTimer(ros::Duration(period_integration), [&](const ros::TimerEvent&) 
@@ -351,10 +403,15 @@ int main(int argc, char **argv)
 		}
     else
     {
-
-      if (current_fsm.state_machine.compare("Launch") == 0)
+      
+      if (current_fsm.state_machine.compare("Rail") == 0)
       {
+        stepper.do_step(dynamics_rail, X0, 0, xout, 0 + period_integration);
+      }
 
+      else if (current_fsm.state_machine.compare("Launch") == 0)
+      {
+        stepper.do_step(dynamics_flight, X0, 0, xout, 0 + period_integration);
       }
 
       else if (current_fsm.state_machine.compare("Coast") == 0)
@@ -362,17 +419,15 @@ int main(int argc, char **argv)
         rocket_control << 0, 0,
                           0, 0,
                           0, 0;
+        stepper.do_step(dynamics_flight, X0, 0, xout, 0 + period_integration);
       }
 
-      stepper.do_step(dynamics, X0, 0, xout, 0 + period_integration);
+      
       X0 = xout;
 
       rocket.update_CM(X0(13));
 
       send_fake_sensor(rocket_sensor_pub);
-
-      //std::cout << rocket.total_Inertia[0] << " "  << rocket.total_Inertia[1] << " " << rocket.total_Inertia[2] << "\n";
-
     }
 		
 

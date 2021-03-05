@@ -70,6 +70,7 @@ accelerometer_data = raw_data[:, 4:7][select_data]*9.81
 gyroscope_data = raw_data[:, 7:][select_data]
 baro_data = raw_data[:,2][select_data]
 
+print("Apogee: {}".format(max(barometer)))
 
 
 # Plot data -----------------------------------------------
@@ -86,6 +87,7 @@ l = axe[0][2].plot(time_simu[select_simu], barometer[select_simu])
 axe[0][2].legend(l, ('barometer [m]'))
 
 l = axe[1][0].plot(time_data, accelerometer_data)
+axe[0][0].plot(time_data, accelerometer_data, "+")
 axe[1][0].legend(l, ('X acc [m/s^2]', 'Y acc [m/s^2]', 'Z acc [m/s^2]'))
 
 l = axe[1][1].plot(time_data, gyroscope_data)

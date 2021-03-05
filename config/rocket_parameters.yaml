@@ -29,9 +29,9 @@ propellant_mass: 3.693
 propellant_CM: 3
 Isp: 213
 maxThrust:
-  - 100
-  - 100
-  - 2400
+  - 0
+  - 0
+  - 3000
 minThrust: 
   - -100
   - -100

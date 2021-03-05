@@ -5,12 +5,13 @@ longitude: 8.07575
 temperature: 300
 humidity: 0.5
 pressure: 84972.484
-apogee:
+apogee: # targeted apogee
   - 0
   - 0
   - 2000
-wind_speed: 7
+wind_speed: 5
 wind_direction: -45 # angle of wind from north, clockwise
 rail_azimuth: 135 # angle of rail from north, clock wise
-rail_zenith: 5 # angle of rail from vertical
+rail_zenith: 7 # angle of rail from vertical
 rocket_roll: -45 # initial roll angle around z rocket axis
+rail_length: 5

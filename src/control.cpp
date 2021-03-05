@@ -1,5 +1,7 @@
 #include "ros/ros.h"
 
+#include <ros/package.h>
+
 #include "tvc_simulator/FSM.h"
 #include "tvc_simulator/State.h"
 #include "tvc_simulator/Waypoint.h"
@@ -65,6 +67,9 @@ class Rocket
 
     std::vector<float> J_inv{0, 0, 0};
 
+    std::vector<float> full_thrust;
+    std::vector<float> full_thrust_time;
+
 
     void update_CM( float current_prop_mass)
     {
@@ -123,6 +128,56 @@ class Rocket
       total_Inertia[2] = dry_Inertia[2];
 
       update_CM(propellant_mass);
+
+      load_motor();
+    }
+
+    void load_motor()
+    {
+      std::string path = ros::package::getPath("tvc_simulator") + "/config/motor_file.txt";
+
+      std::string line;
+      std::ifstream myfile (path);
+      if (myfile.is_open())
+      {
+        while ( getline (myfile,line) )
+        {
+          int separator = line.find("\t");
+          std::string time_string = line.substr(0, separator);
+          std::string thrust_string = line.substr(separator+1, line.length()-separator);
+
+          full_thrust_time.push_back(std::stof(time_string));
+          full_thrust.push_back(std::stof(thrust_string));
+        }
+        myfile.close();
+
+      }
+      else{ROS_WARN("Didn't find motor file");}
+    }
+
+    float get_full_thrust(float time_thrust)
+    {
+      int i;
+      for(i = 0; i<full_thrust_time.size(); i++)
+      {
+        if(time_thrust < full_thrust_time[i])
+        {
+          break;
+        }
+      }
+      i--;
+      
+      float interp_thrust;
+      if (time_thrust < full_thrust_time.back())
+        interp_thrust = (full_thrust[i] + (time_thrust-full_thrust_time[i])/(full_thrust_time[i+1]-full_thrust_time[i])*(full_thrust[i+1]-full_thrust[i]));
+
+      else 
+        interp_thrust = full_thrust_time.back();
+
+      if(time_thrust < 0)
+        interp_thrust = 0;
+
+      return interp_thrust;
     }
 };
 
@@ -501,15 +556,14 @@ int main(int argc, char **argv)
   std::vector<int> average_status;
 
   // Thread to compute control. Duration defines interval time in seconds
-  ros::Timer control_thread = n.createTimer(ros::Duration(0.06), [&](const ros::TimerEvent&) 
+  ros::Timer control_thread = n.createTimer(ros::Duration(0.05), [&](const ros::TimerEvent&) 
 	{
-  
     // Get current FSM and time
     if(client_fsm.call(srv_fsm))
     {
       current_fsm = srv_fsm.response.fsm;
     }
-
+    /*
     // Init state trajectory guess from current state and guidance trajectory
     mpc_t::traj_state_t x_init;
     mpc_t::traj_control_t u_init;
@@ -541,14 +595,27 @@ int main(int argc, char **argv)
 
     mpc.ocp().xs <<  target_point; // last trajectory point is also our target
     mpc.ocp().us << target_control;
-    // ROS_INFO(" ");
-    //std::cout << x_init.head(3).transpose() << "\n";
 
+    */
     // State machine ------------------------------------------
 		if (current_fsm.state_machine.compare("Idle") == 0)
 		{
 			// Do nothing
 		}
+
+    else if (current_fsm.state_machine.compare("Rail") == 0)
+    {
+      thrust_force.x = 0;
+      thrust_force.y = 0;
+      thrust_force.z = rocket.get_full_thrust(current_fsm.time_now);
+
+      thrust_torque.x = 0;
+      thrust_torque.y = 0;
+      thrust_torque.z = 0;
+
+			control_law.force = thrust_force;
+			control_law.torque = thrust_torque;
+    }
 
 		else if (current_fsm.state_machine.compare("Launch") == 0)
 		{
@@ -563,10 +630,10 @@ int main(int argc, char **argv)
 
 		  // Solve problem and save solution
 			double time_now = ros::Time::now().toSec();
-		  mpc.solve();
-      time_now = 1000*(ros::Time::now().toSec()-time_now);
+		  //mpc.solve();
+      //time_now = 1000*(ros::Time::now().toSec()-time_now);
 
-			ROS_INFO("Ctr T= %.2f ms, st: %d, iter: %d", time_now , mpc.info().status.value,  mpc.info().iter);
+			//ROS_INFO("Ctr T= %.2f ms, st: %d, iter: %d", time_now , mpc.info().status.value,  mpc.info().iter);
       average_status.push_back(mpc.info().status.value);
       average_time.push_back(time_now);
 
@@ -579,7 +646,7 @@ int main(int argc, char **argv)
 
 
       // Simple P controller. Thrust in z is used to reach apogee, Thrust in x and y is used to keep vertical orientation
-			thrust_force.z = 2400;
+			thrust_force.z = rocket.get_full_thrust(current_fsm.time_now);
       thrust_force.x = 0;
       thrust_force.y = 0;
 
@@ -641,8 +708,6 @@ int main(int argc, char **argv)
     }
 	
 		control_pub.publish(control_law);
-		//ROS_INFO("Z force is %f", thrust_force.z);
-
   });
 
 	// Automatic callback of service and publisher from here

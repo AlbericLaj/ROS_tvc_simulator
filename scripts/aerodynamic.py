@@ -117,7 +117,7 @@ def init_integrator():
 
 	Bellalui_2.set_motor_Isp(rocket_data["Isp"])
   
-	US_Atmos = stdAtmosUS(1567, 290.15, 84972.484, 0.51031 )
+	US_Atmos = stdAtmosUS(env_data["ground_altitude"], env_data["temperature"], env_data["pressure"], env_data["humidity"] )
 	US_Atmos.set_wind( env_data["wind_speed"], 180-env_data["wind_direction"])
   
 	SimObj = Simulator3D(Bellalui_2, US_Atmos)
@@ -156,7 +156,7 @@ if __name__ == '__main__':
 	# Simulation object
 	rocket_sim = init_integrator()
 
-	rate = rospy.Rate(20) # In Hz
+	rate = rospy.Rate(30) # In Hz
 
 	while not rospy.is_shutdown():
 

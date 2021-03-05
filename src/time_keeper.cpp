@@ -38,9 +38,9 @@ bool sendFSM(tvc_simulator::GetFSM::Request &req, tvc_simulator::GetFSM::Respons
 }
 
 void processCommand(const std_msgs::String &command){
-    current_fsm.state_machine = "Launch";
+    current_fsm.state_machine = "Rail";
     time_zero = ros::Time::now().toSec();
-    if(command.data.compare("Launch") == 0){
+    if(command.data.compare("Rail") == 0){
         //TODO ?
     }
 }
@@ -75,6 +75,9 @@ int main(int argc, char **argv)
 	timer_pub.publish(current_fsm);
 	time_zero = ros::Time::now().toSec();
 
+	float rail_length = 0;
+	n.getParam("/environment/rail_length", rail_length);
+
 	ros::Timer FSM_thread = n.createTimer(ros::Duration(0.01),
 	[&](const ros::TimerEvent&) 
 	{
@@ -89,10 +92,20 @@ int main(int argc, char **argv)
 
 		else
 		{
-			if (current_fsm.state_machine.compare("Launch") == 0)
+			if (current_fsm.state_machine.compare("Rail") == 0)
+			{
+				// End of rail
+				if(current_rocket_state.pose.position.z > rail_length)
+				{
+					current_fsm.state_machine = "Launch";
+				}
+
+			}
+
+			else if (current_fsm.state_machine.compare("Launch") == 0)
 			{
 				// End of burn -> no more thrust
-				if(current_rocket_state.propeller_mass <0)
+				if(current_rocket_state.propeller_mass < 0)
 				{
 					current_fsm.state_machine = "Coast";
 				}
