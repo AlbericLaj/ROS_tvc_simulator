@@ -282,3 +282,7 @@ add_executable(control_interface src/prototypes/drone/drone_interface.cpp)
 target_link_libraries(control_interface Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
 add_dependencies(control_interface ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
+add_executable(actuators_tests bash_scripts/on_pi/actuators_tests.cpp)
+target_link_libraries(actuators_tests Eigen3::Eigen ${catkin_LIBRARIES})
+add_dependencies(actuators_tests ${${PROJECT_NAME}_EXPORTED_TARGETS})
+

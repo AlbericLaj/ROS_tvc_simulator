@@ -32,7 +32,7 @@ propellant_CM: 0.1
 Isp: -1
 maxThrust: 25
 minThrust: 0
-maxTorque: 2
+maxTorque: 1
 maxServo1Angle: 0.3
 maxServo2Angle: 0.3
 CM_to_thrust_distance: 0.4

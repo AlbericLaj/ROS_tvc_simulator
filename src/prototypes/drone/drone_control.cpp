@@ -395,14 +395,17 @@ float int_error;
 void set_PD_control_law(tvc_simulator::DroneControl &control_law) {
     // Basic PD controller for attitude and PID for altitude
 
-    control_law.thrust = grav_comp_ff + (target_height - current_state.pose.position.z) * kp_z -
+    float thrust = grav_comp_ff + (target_height - current_state.pose.position.z) * kp_z -
                          (current_state.pose.position.z - previous_state.pose.position.z) * kd_z + int_error * ki_z;
     control_law.servo2 = -current_state.pose.orientation.x * kp -
                          (current_state.pose.orientation.x - previous_state.pose.orientation.x) * kd;
     control_law.servo1 = -current_state.pose.orientation.y * kp -
                          (current_state.pose.orientation.y - previous_state.pose.orientation.y) * kd;
-    control_law.torque = -current_state.pose.orientation.z * kp_t -
+    float torque = -current_state.pose.orientation.z * kp_t -
                          (current_state.pose.orientation.z - previous_state.pose.orientation.z) * kd_t;
+
+    control_law.top = thrust/2 + torque/2;
+    control_law.bottom = thrust/2 - torque/2;
 
     int_error += target_height - current_state.pose.position.z;
 }
@@ -596,16 +599,19 @@ int main(int argc, char **argv) {
                 // Apply MPC control
                 control_law.servo1 = control_MPC[0];
                 control_law.servo2 = control_MPC[1];
-                control_law.thrust = control_MPC[2];
-                control_law.torque = control_MPC[3];
+
+                float thrust = control_MPC[2];
+                float torque = control_MPC[3];
+                control_law.top = thrust/2 + torque/2;
+                control_law.bottom = thrust/2 - torque/2;
             }
 
 
             //saturate inputs
-            control_law.thrust = std::min(std::max(control_law.thrust, rocket.minThrust), rocket.maxThrust);
             control_law.servo1 = std::min(std::max(control_law.servo1, -rocket.maxServo1Angle), rocket.maxServo1Angle);
             control_law.servo2 = std::min(std::max(control_law.servo2, -rocket.maxServo2Angle), rocket.maxServo2Angle);
-            control_law.torque = std::min(std::max(control_law.torque, -rocket.maxTorque), rocket.maxTorque);
+//            control_law.top = std::min(std::max(control_law.top, 0.0), 100.0); //TODO change max
+//            control_law.bottom = std::min(std::max(control_law.bottom, 0.0), 100.0);
 
             // Send optimal trajectory computed by control. Send only position for now
             tvc_simulator::Trajectory trajectory_msg;
@@ -632,8 +638,8 @@ int main(int argc, char **argv) {
 
             control_law.servo1 = 0;
             control_law.servo2 = 0;
-            control_law.thrust = 0;
-            control_law.torque = 0;
+            control_law.top = 0;
+            control_law.bottom = 0;
             std::cout << "Average time: "
                       << (std::accumulate(average_time.begin(), average_time.end(), 0.0)) / average_time.size()
                       << "ms | Average error (x, y, z): "

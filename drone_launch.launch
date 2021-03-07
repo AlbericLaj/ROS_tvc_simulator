@@ -19,7 +19,7 @@
 
   <node name="control" pkg="tvc_simulator" type="drone_control" output ="screen"/>
   <node name="control_interface" pkg="tvc_simulator" type="control_interface" cwd = "node"/>
-  <node name="guidance" pkg="tvc_simulator" type="drone_guidance" output ="screen"  />
+<!--  <node name="guidance" pkg="tvc_simulator" type="drone_guidance" output ="screen"  />-->
   <node name="fast_integrator" pkg="tvc_simulator" type="fast_integrator" cwd = "node" output ="screen"/>
   <node name="disturbance" pkg="tvc_simulator" type="disturbance.py" cwd = "node"/>
   <node name="data_fusion" pkg="tvc_simulator" type="data_fusion" cwd = "node"/>
@@ -28,7 +28,6 @@
   <node name="visualization" pkg="tvc_simulator" type="visualization" />
   <node name="rocket_state" pkg="rostopic" type="rostopic" args="echo /rocket_state"  /> 
   <node name="rqt_gui" pkg="rqt_gui" type="rqt_gui" args="--perspective-file $(find tvc_simulator)/rviz/drone_GUI.perspective"/>
-<!--  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find tvc_simulator)/rviz/rocket_config.rviz" />-->
 
 </launch>
 

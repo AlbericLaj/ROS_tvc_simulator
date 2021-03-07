@@ -14,7 +14,11 @@ ros::Publisher control_pub, drone_state_pub;
 float CM_to_thrust_distance = 0.4;
 
 void publishConvertedControl(const tvc_simulator::DroneControl::ConstPtr &drone_control) {
-    Eigen::Vector3d thrust_vertical(0, 0, drone_control->thrust);
+
+    float thrust = drone_control->top + drone_control->bottom;
+    float torque = drone_control->top - drone_control->bottom;
+
+    Eigen::Vector3d thrust_vertical(0, 0, thrust);
 
     //quaternion representing the rotation of the servos around the Y-axis followed by the rotation around the X-axis
     Eigen::Quaterniond thrust_rotation(
@@ -31,7 +35,7 @@ void publishConvertedControl(const tvc_simulator::DroneControl::ConstPtr &drone_
 
     converted_control.torque.x = thrust_vector.x() * CM_to_thrust_distance;
     converted_control.torque.y = thrust_vector.y() * CM_to_thrust_distance;
-    converted_control.torque.z = drone_control->torque;
+    converted_control.torque.z = torque;
 
     converted_control.force.x = thrust_vector.x();
     converted_control.force.y = thrust_vector.y();
@@ -67,6 +71,7 @@ int main(int argc, char **argv) {
 
     // Create control publisher
     drone_state_pub = n.advertise<tvc_simulator::DroneState>("drone_state", 10);
+
 
     // Automatic callback of service and publisher from here
     ros::spin();
