@@ -13,6 +13,13 @@ ros::Publisher control_pub, drone_state_pub;
 
 float CM_to_thrust_distance = 0.4;
 
+
+Matrix<double, 2, 2> sysA;
+Matrix<double, 2, 1> sysB;
+Matrix<double, 1, 2> sysC;
+Matrix<double, 2, 1> x_servo1;
+Matrix<double, 2, 1> x_servo2;
+
 void publishConvertedControl(const tvc_simulator::DroneControl::ConstPtr &drone_control) {
 
     float thrust = drone_control->top + drone_control->bottom;
@@ -20,10 +27,18 @@ void publishConvertedControl(const tvc_simulator::DroneControl::ConstPtr &drone_
 
     Eigen::Vector3d thrust_vertical(0, 0, thrust);
 
+    // ss model for ts = 0.06//TODO use integrator time step instead
+    x_servo1 = sysA * x_servo1 + sysB * ((double) drone_control->servo1);
+    double servo1 = sysC * x_servo1;
+
+    x_servo2 = sysA * x_servo2 + sysB * ((double) drone_control->servo2);
+    double servo2 = sysC * x_servo2;
+
     //quaternion representing the rotation of the servos around the Y-axis followed by the rotation around the X-axis
-    Eigen::Quaterniond thrust_rotation(
-            AngleAxisd(drone_control->servo1, Vector3d::UnitX()) *
-            AngleAxisd(drone_control->servo2, Vector3d::UnitY())
+    Eigen::Quaterniond
+            thrust_rotation(
+            AngleAxisd(servo1, Vector3d::UnitX()) *
+            AngleAxisd(servo2, Vector3d::UnitY())
     );
 
     //rotated thrust vector, in body frame
@@ -54,6 +69,15 @@ void publishConvertedState(const tvc_simulator::State::ConstPtr &rocket_state) {
 }
 
 int main(int argc, char **argv) {
+    //init state system
+    x_servo1 << 0, 0;
+    x_servo2 << 0, 0;
+    sysA << 0.9796, -0.6677,
+            0.5, 0;
+    sysB << 0.5,
+            0;
+    sysC << 0.4177, 0.5771;
+
     // Init ROS time keeper node
     ros::init(argc, argv, "drone_interface");
     ros::NodeHandle n;
