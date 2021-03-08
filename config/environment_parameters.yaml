@@ -8,10 +8,10 @@ pressure: 84972.484
 apogee: # targeted apogee
   - 0
   - 0
-  - 2000
-wind_speed: 5
-wind_direction: -45 # angle of wind from north, clockwise
-rail_azimuth: 135 # angle of rail from north, clock wise
+  - 3000
+wind_speed: 10
+wind_direction: 180 # angle of wind from north, clockwise
+rail_azimuth: 0 # angle of rail from north, clock wise
 rail_zenith: 4 # angle of rail from vertical
-rocket_roll: -45 # initial roll angle around z rocket axis
-rail_length: 6
+rocket_roll: 0 # initial roll angle around z rocket axis
+rail_length: 4

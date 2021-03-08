@@ -204,7 +204,8 @@ Eigen::Matrix<double, 4,1> convertControl_SI(const Eigen::Matrix<double, 4,1>& u
   return input;
 }
 
-
+tvc_simulator::Control MPC_control();
+tvc_simulator::Control passive_control();
 
 
 
@@ -461,20 +462,22 @@ public:
 
 
 
+using admm = boxADMM<control_ocp::VAR_SIZE, control_ocp::NUM_EQ, control_ocp::scalar_t,
+                control_ocp::MATRIXFMT, linear_solver_traits<control_ocp::MATRIXFMT>::default_solver>;
+                
+using osqp_solver_t = polympc::OSQP<control_ocp::VAR_SIZE, control_ocp::NUM_EQ, control_ocp::scalar_t>;
 
 
+// Creates solver
+using mpc_t = MPC<control_ocp, MySolver, osqp_solver_t>;
+mpc_t mpc;
 
-
-
+// Variables to track performance over whole simulation
+std::vector<float> average_time;
+std::vector<int> average_status;
 
 int main(int argc, char **argv)
 {
-  using admm = boxADMM<control_ocp::VAR_SIZE, control_ocp::NUM_EQ, control_ocp::scalar_t,
-                 control_ocp::MATRIXFMT, linear_solver_traits<control_ocp::MATRIXFMT>::default_solver>;
-                 
-  using osqp_solver_t = polympc::OSQP<control_ocp::VAR_SIZE, control_ocp::NUM_EQ, control_ocp::scalar_t>;
-
-
 	// Init ROS control node
   ros::init(argc, argv, "control");
   ros::NodeHandle n;
@@ -494,12 +497,7 @@ int main(int argc, char **argv)
 
   // Setup Waypoint client and srv variable for trajectory following
   ros::ServiceClient client_waypoint = n.serviceClient<tvc_simulator::GetWaypoint>("getWaypoint");
-  tvc_simulator::GetWaypoint srv_waypoint;
-	
-  // Initialize control
-	tvc_simulator::Control control_law;
-	geometry_msgs::Vector3 thrust_force;
-	geometry_msgs::Vector3 thrust_torque;
+  tvc_simulator::GetWaypoint srv_waypoint;	
 
 	// Initialize fsm
 	current_fsm.time_now = 0;
@@ -509,9 +507,6 @@ int main(int argc, char **argv)
   rocket.init(n);
   
 	// Init MPC ----------------------------------------------------------------------------------------------------------------------
-	// Creates solver
-	using mpc_t = MPC<control_ocp, MySolver, osqp_solver_t>;
-	mpc_t mpc;
 	
   mpc.settings().max_iter = 1;
   mpc.settings().line_search_max_iter = 10;
@@ -552,19 +547,18 @@ int main(int argc, char **argv)
         rocket.propellant_mass;
   mpc.x_guess(x0.replicate(14,1));	
 
-  // Variables to track performance over whole simulation
-	std::vector<float> average_time;
-  std::vector<int> average_status;
-
   // Thread to compute control. Duration defines interval time in seconds
   ros::Timer control_thread = n.createTimer(ros::Duration(0.05), [&](const ros::TimerEvent&) 
 	{
+    // Init default control to zero
+    tvc_simulator::Control control_law;
+
     // Get current FSM and time
     if(client_fsm.call(srv_fsm))
     {
       current_fsm = srv_fsm.response.fsm;
     }
-    /*
+    
     // Init state trajectory guess from current state and guidance trajectory
     mpc_t::traj_state_t x_init;
     mpc_t::traj_control_t u_init;
@@ -597,7 +591,7 @@ int main(int argc, char **argv)
     mpc.ocp().xs <<  target_point; // last trajectory point is also our target
     mpc.ocp().us << target_control;
 
-    */
+    
     // State machine ------------------------------------------
 		if (current_fsm.state_machine.compare("Idle") == 0)
 		{
@@ -606,74 +600,13 @@ int main(int argc, char **argv)
 
     else if (current_fsm.state_machine.compare("Rail") == 0)
     {
-      thrust_force.x = 0;
-      thrust_force.y = 0;
-      thrust_force.z = rocket.get_full_thrust(current_fsm.time_now);
-
-      thrust_torque.x = 0;
-      thrust_torque.y = 0;
-      thrust_torque.z = 0;
-
-			control_law.force = thrust_force;
-			control_law.torque = thrust_torque;
+      control_law = passive_control();
     }
 
 		else if (current_fsm.state_machine.compare("Launch") == 0)
 		{
-      x0 <<   current_state.pose.position.x/1000, current_state.pose.position.y/1000, current_state.pose.position.z/1000,
-							current_state.twist.linear.x/1000, current_state.twist.linear.y/1000, current_state.twist.linear.z/1000,
-							current_state.pose.orientation.x, current_state.pose.orientation.y, current_state.pose.orientation.z,current_state.pose.orientation.w, 
-							current_state.twist.angular.x, current_state.twist.angular.y, current_state.twist.angular.z,
-							current_state.propeller_mass;
 
-      mpc.initial_conditions(x0);
-      rocket.update_CM(x0(13));
-
-		  // Solve problem and save solution
-			double time_now = ros::Time::now().toSec();
-		  //mpc.solve();
-      //time_now = 1000*(ros::Time::now().toSec()-time_now);
-
-			//ROS_INFO("Ctr T= %.2f ms, st: %d, iter: %d", time_now , mpc.info().status.value,  mpc.info().iter);
-      average_status.push_back(mpc.info().status.value);
-      average_time.push_back(time_now);
-
-		  // Get state and control solution
-			Eigen::Matrix<double, 4, 1> control_MPC;
-			control_MPC =  mpc.solution_u_at(0);
-			
-			Eigen::Matrix<double, 4,1> input = convertControl_SI(control_MPC);
-			//ROS_INFO("Fx: %f, Fy: %f, Fz: %f, Mx: %f \n",  input[0], input[1], input[2], input[3]);
-
-
-      // Simple P controller. Thrust in z is used to reach apogee, Thrust in x and y is used to keep vertical orientation
-			thrust_force.z = rocket.get_full_thrust(current_fsm.time_now);
-      thrust_force.x = 0;
-      thrust_force.y = 0;
-
-      // Apply MPC control
-			//thrust_force.x = input[0];
-			//thrust_force.y = input[1];
-			//thrust_force.z = input[2];
-      //thrust_torque.z = input[3];
-
-      // Limit input between min and max
-      if(thrust_force.z > rocket.maxThrust[2]) thrust_force.z = rocket.maxThrust[2];
-      if(thrust_force.z < rocket.minThrust[2]) thrust_force.z = rocket.minThrust[2];
-      
-      if(thrust_force.x > rocket.maxThrust[0]) thrust_force.x = rocket.maxThrust[0];
-      if(thrust_force.x < rocket.minThrust[0]) thrust_force.x = rocket.minThrust[0];
-
-      if(thrust_force.y > rocket.maxThrust[1]) thrust_force.y = rocket.maxThrust[1];
-      if(thrust_force.y < rocket.minThrust[1]) thrust_force.y = rocket.maxThrust[1];
-
-      // Torque in X and Y is defined by thrust in X and Y. Torque in Z is free variable
-      thrust_torque.x = thrust_force.x*rocket.total_CM; 
-      thrust_torque.y = thrust_force.y*rocket.total_CM;
-
-			control_law.force = thrust_force;
-			control_law.torque = thrust_torque;
-      //std::cout << control_law << "\n";
+      control_law = MPC_control();
 
       // Send optimal trajectory computed by control. Send only position for now
 			tvc_simulator::Trajectory trajectory_msg;
@@ -694,17 +627,6 @@ int main(int argc, char **argv)
       // Slow down control to 10s period for reducing useless computation
       control_thread.setPeriod(ros::Duration(10.0));
 
-      thrust_force.x = 0;
-      thrust_force.y = 0;
-      thrust_force.z = 0;
-
-      thrust_torque.x = 0;
-      thrust_torque.y = 0;
-      thrust_torque.z = 0;
-
-			control_law.force = thrust_force;
-			control_law.torque = thrust_torque;
-
       std::cout << "Average time: " << (std::accumulate(average_time.begin(), average_time.end(), 0.0))/average_time.size()  << "ms | Average status: " << (std::accumulate(average_status.begin(), average_status.end(), 0.0))/average_status.size()  << "\n";
     }
 	
@@ -714,4 +636,91 @@ int main(int argc, char **argv)
 	// Automatic callback of service and publisher from here
 	ros::spin();
 
+}
+
+
+tvc_simulator::Control passive_control()
+{
+  // Init control message
+  tvc_simulator::Control control_law;
+  geometry_msgs::Vector3 thrust_force;
+	geometry_msgs::Vector3 thrust_torque;
+
+  thrust_force.x = 0;
+  thrust_force.y = 0;
+  thrust_force.z = rocket.get_full_thrust(current_fsm.time_now);
+
+  thrust_torque.x = 0;
+  thrust_torque.y = 0;
+  thrust_torque.z = 0;
+
+  control_law.force = thrust_force;
+  control_law.torque = thrust_torque;
+
+  return control_law;
+}
+
+tvc_simulator::Control MPC_control()
+{
+  // Init control message
+  tvc_simulator::Control control_law;
+  geometry_msgs::Vector3 thrust_force;
+	geometry_msgs::Vector3 thrust_torque;
+
+  mpc_t::state_t x0;
+  x0 <<   current_state.pose.position.x/1000, current_state.pose.position.y/1000, current_state.pose.position.z/1000,
+							current_state.twist.linear.x/1000, current_state.twist.linear.y/1000, current_state.twist.linear.z/1000,
+							current_state.pose.orientation.x, current_state.pose.orientation.y, current_state.pose.orientation.z,current_state.pose.orientation.w, 
+							current_state.twist.angular.x, current_state.twist.angular.y, current_state.twist.angular.z,
+							current_state.propeller_mass;
+
+  mpc.initial_conditions(x0);
+  rocket.update_CM(x0(13));
+
+  // Solve problem and save solution
+  double time_now = ros::Time::now().toSec();
+  mpc.solve();
+  time_now = 1000*(ros::Time::now().toSec()-time_now);
+
+  ROS_INFO("Ctr T= %.2f ms, st: %d, iter: %d", time_now , mpc.info().status.value,  mpc.info().iter);
+  average_status.push_back(mpc.info().status.value);
+  average_time.push_back(time_now);
+
+  // Get state and control solution
+  Eigen::Matrix<double, 4, 1> control_MPC;
+  control_MPC =  mpc.solution_u_at(0);
+  
+  Eigen::Matrix<double, 4,1> input = convertControl_SI(control_MPC);
+  //ROS_INFO("Fx: %f, Fy: %f, Fz: %f, Mx: %f \n",  input[0], input[1], input[2], input[3]);
+
+
+  // Simple P controller. Thrust in z is used to reach apogee, Thrust in x and y is used to keep vertical orientation
+  thrust_force.z = rocket.get_full_thrust(current_fsm.time_now);
+  thrust_force.x = 0;
+  thrust_force.y = 0;
+
+  // Apply MPC control
+  thrust_force.x = input[0];
+  thrust_force.y = input[1];
+  thrust_force.z = input[2];
+  thrust_torque.z = input[3];
+
+  // Limit input between min and max
+  if(thrust_force.z > rocket.maxThrust[2]) thrust_force.z = rocket.maxThrust[2];
+  if(thrust_force.z < rocket.minThrust[2]) thrust_force.z = rocket.minThrust[2];
+  
+  if(thrust_force.x > rocket.maxThrust[0]) thrust_force.x = rocket.maxThrust[0];
+  if(thrust_force.x < rocket.minThrust[0]) thrust_force.x = rocket.minThrust[0];
+
+  if(thrust_force.y > rocket.maxThrust[1]) thrust_force.y = rocket.maxThrust[1];
+  if(thrust_force.y < rocket.minThrust[1]) thrust_force.y = rocket.maxThrust[1];
+
+  // Torque in X and Y is defined by thrust in X and Y. Torque in Z is free variable
+  thrust_torque.x = thrust_force.x*rocket.total_CM; 
+  thrust_torque.y = thrust_force.y*rocket.total_CM;
+
+  control_law.force = thrust_force;
+  control_law.torque = thrust_torque;
+
+  return control_law;
 }
