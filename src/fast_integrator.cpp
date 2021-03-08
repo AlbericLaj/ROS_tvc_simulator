@@ -128,6 +128,9 @@ Eigen::Matrix<double, 3,2> rocket_control;
 //Global variable with last updated aerodynamic force & torque
 Eigen::Matrix<double, 3,2> aero_control;
 
+//Global variable with last updated perturbations force & torque
+Eigen::Matrix<double, 3,2> perturbation_control;
+
 // Global variable with last requested fsm
 tvc_simulator::FSM current_fsm;
 
@@ -145,6 +148,14 @@ void rocket_aeroCallback(const tvc_simulator::Control::ConstPtr& rocket_aero)
   aero_control <<   rocket_aero->force.x,  rocket_aero->torque.x,
                     rocket_aero->force.y,  rocket_aero->torque.y,
                     rocket_aero->force.z,  rocket_aero->torque.z;
+}   
+
+// Callback function to store last received aero force and torque
+void rocket_perturbationCallback(const tvc_simulator::Control::ConstPtr& perturbation)
+{
+  perturbation_control <<   perturbation->force.x,  perturbation->torque.x,
+                            perturbation->force.y,  perturbation->torque.y,
+                            perturbation->force.z,  perturbation->torque.z;
 }   
 
 // Callback function to store last received fsm
@@ -209,7 +220,7 @@ void dynamics_flight(const state& x, state& xdot, const double &t)
   Eigen::Matrix<double, 3, 1> gravity; gravity << 0, 0, g0*mass;
 
   // Total force in inertial frame [N]
-  Eigen::Matrix<double, 3, 1> total_force;  total_force = rot_matrix*rocket_control.col(0) - gravity + aero_control.col(0);
+  Eigen::Matrix<double, 3, 1> total_force;  total_force = rot_matrix*rocket_control.col(0) - gravity + aero_control.col(0) + perturbation_control.col(0);
   //std::cout << total_force.transpose() << "\n";
   
 
@@ -221,7 +232,7 @@ void dynamics_flight(const state& x, state& xdot, const double &t)
   Eigen::Matrix<double, 3, 1> I_inv; I_inv << 1/rocket.total_Inertia[0], 1/rocket.total_Inertia[1], 1/rocket.total_Inertia[2]; 
 
   Eigen::Matrix<double, 3, 1> total_torque; 
-  total_torque = rocket_control.col(1) + rot_matrix.transpose()*aero_control.col(1);
+  total_torque = rocket_control.col(1) + rot_matrix.transpose()*(aero_control.col(1) + perturbation_control.col(1));
 
   // -------------- Differential equation ---------------------
 
@@ -333,6 +344,9 @@ int main(int argc, char **argv)
 
   // Subscribe to aero message 
   ros::Subscriber rocket_aero_sub = n.subscribe("rocket_aero", 100, rocket_aeroCallback);
+
+  // Subscribe to perturbations message 
+  ros::Subscriber rocket_perturbation_sub = n.subscribe("disturbance_pub", 100, rocket_perturbationCallback);
 
   // Subscribe to time_keeper for fsm and time
   ros::Subscriber fsm_sub = n.subscribe("fsm_pub", 100, fsmCallback);

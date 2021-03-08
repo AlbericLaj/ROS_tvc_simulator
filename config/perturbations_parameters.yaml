@@ -1,17 +1,17 @@
 # Perturbations parameters
 
 wind_gust_intensity:      # Wind speed in [m/s] (world X and Y)
-  - 1 
-  - 1
-wind_gust_assymetry: 0  # Range of gust position, from 0 to 1 rocket length
+  - 5 
+  - 5
+wind_gust_assymetry: 0.3  # Range of gust position, from 0 to 1 rocket length
 wind_gust_var: 5          # Gust standart deviation as percentage of wind gust intensity
 
 motor_tilt:               # 2D tilt of motor in degree
-  - 0.1
-  - 0.1
+  - 0.5
+  - 0.5
 plume_tilt_var:           # Plume tilt standard deviation in degree
-  - 0.01
-  - 0.01
+  - 0.1
+  - 0.1
 
 fins_tilt:                # Tilt angle of each fins
   - 2
