@@ -515,6 +515,7 @@ int main(int argc, char **argv)
 	
   mpc.settings().max_iter = 1;
   mpc.settings().line_search_max_iter = 10;
+  //mpc.m_solver.qp_settings().max_iter = 100;
 
   // Input constraints
   const double inf = std::numeric_limits<double>::infinity();
