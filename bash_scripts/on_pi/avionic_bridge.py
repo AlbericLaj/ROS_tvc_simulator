@@ -7,16 +7,16 @@ import serial
 import pigpio 
 import time
 
-from drone_tvc_simulator.msg import DroneControl
-from drone_tvc_simulator.msg import FSM
-from drone_tvc_simulator.msg import DroneState
+from tvc_simulator.msg import DroneControl
+from tvc_simulator.msg import FSM
+from tvc_simulator.msg import DroneState
 
 def control_callback(control):
     global current_control
     current_control = control
 
-    top_motor_cmd = control.thrust + control.torque
-    bottom_motor_cmd = control.thrust - control.torque
+    top_motor_cmd = control.top
+    bottom_motor_cmd = control.bottom
 
     # saturate inputs
     control.servo1 = min(max(control.servo1, -0.8), 0.8)
@@ -38,25 +38,24 @@ def control_callback(control):
     pi.set_servo_pulsewidth(pitch_pin, pitch_DC) # update position
     pi.set_servo_pulsewidth(yaw_pin, yaw_DC) # update position
 
-    pi.set_servo_pulsewidth(top_motor_pin, top_motor_DC)
-    pi.set_servo_pulsewidth(bottom_motor_pin, bottom_motor_DC)
+    pi.set_servo_pulsewidth(top_motor_pin, 1200)
+    pi.set_servo_pulsewidth(bottom_motor_pin, 1200)
 
 if __name__ == '__main__':
 
     # Create global variable
-    rocket_state = State()
-    rocket_state.propeller_mass = 0.7
-    
-    current_control = Control()
+    rocket_state = DroneState()
+
+    current_control = DroneControl()
 
     # Init ROS
     rospy.init_node('avionic_bridge', anonymous=True)
     
     # Subscribe to rocket_control 
-    rospy.Subscriber("control_pub", Control, control_callback)
+    rospy.Subscriber("drone_control_pub", DroneControl, control_callback)
     
     # Publisher for rocket state from AV control
-    rocket_state_pub = rospy.Publisher('rocket_state', State, queue_size=10)
+    rocket_state_pub = rospy.Publisher('drone_state', DroneState, queue_size=10)
     
     # Config Rpi
     ser = serial.Serial('/dev/serial0', 115200)  # open serial port

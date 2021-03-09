@@ -1,40 +1,16 @@
 <launch>
-    <machine name="local" address="localhost"/>
-<!--    <machine name="raspberrypi" address="192.168.0.21" user="pi" password="ert2021"-->
-<!--             env-loader="/home/pi/at_robot_ros_env.sh"/>-->
-  <machine name="raspberrypi" address="localhost"/>
 
-    <group ns="rocket">
-        <rosparam file="$(find tvc_simulator)/config/rocket_parameters.yaml"/>
-    </group>
+  <group ns="rocket">
+      <rosparam file="$(find tvc_simulator)/config/rocket_parameters.yaml" />
+  </group>
 
-<!--    <group ns="environment">-->
-<!--        <rosparam file="$(find tvc_simulator)/config/environment_parameters.yaml"/>-->
-<!--    </group>-->
+  <node name="avionic_bridge" pkg="tvc_simulator" type="avionic_bridge.py" output ="screen"/>
+  <node name="actuators_tests" pkg="tvc_simulator" type="actuators_tests.py" output ="screen"/>
+  <node name="time_keeper" pkg="tvc_simulator" type="time_keeper" cwd = "node" />
+<!--    <node name="control" pkg="tvc_simulator" type="drone_control" output ="screen"/>-->
 
-<!--    <group ns="perturbation">-->
-<!--        <rosparam file="$(find tvc_simulator)/config/perturbations_parameters.yaml"/>-->
-<!--    </group>-->
-
-    <group ns="visualization">
-        <rosparam file="$(find tvc_simulator)/config/prototypes/drone/visualization_parameters.yaml"/>
-    </group>
-
-    <node machine="raspberrypi" name="actuators_tests" pkg="tvc_simulator" type="actuators_tests" output="screen"/>
-    <node machine="raspberrypi" name="time_keeper" pkg="tvc_simulator" type="time_keeper" cwd="node"/>
-
-    <!--  <node name="guidance" pkg="tvc_simulator" type="drone_guidance" output ="screen"  />-->
-<!--    <node name="fast_integrator" pkg="tvc_simulator" type="fast_integrator" cwd = "node" output ="screen"/>-->
-    <!--  <node name="disturbance" pkg="tvc_simulator" type="disturbance.py" cwd = "node"/>-->
-    <!--  <node name="data_fusion" pkg="tvc_simulator" type="data_fusion" cwd = "node"/>-->
-
-    <node machine="local" name="control_interface" pkg="tvc_simulator" type="control_interface" cwd="node"/>
-<!--    <node machine="local" name="visualization" pkg="tvc_simulator" type="visualization"/>-->
-    <node machine="local" name="rocket_state" pkg="rostopic" type="rostopic" args="echo /rocket_state"/>
-<!--    <node machine="local" name="rqt_gui" pkg="rqt_gui" type="rqt_gui"-->
-<!--          args="&#45;&#45;perspective-file $(find tvc_simulator)/rviz/drone_GUI.perspective"/>-->
-    <node machine="local" name="rqt_gui" pkg="rqt_gui" type="rqt_gui"
-          args="--perspective-file $(find tvc_simulator)/rviz/drone_remote_control_GUI.perspective"/>
+  <node pkg="rosbag" type="record" name="recorder" args="record -a -O $(find tvc_simulator)/log/log.bag"/>
 </launch>
+
 
 

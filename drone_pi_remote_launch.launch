@@ -1,8 +1,6 @@
 <launch>
     <machine name="local" address="localhost"/>
-<!--    <machine name="raspberrypi" address="192.168.0.21" user="pi" password="ert2021"-->
-<!--             env-loader="/home/pi/at_robot_ros_env.sh"/>-->
-  <machine name="raspberrypi" address="localhost"/>
+   <!--  <machine name="raspberrypi" address="raspberrypi.local" user="pi" password="ert2021" timeout="1" env-loader="/home/pi/ros_catkin_ws/devel/remote_env_loader.sh"/>-->
 
     <group ns="rocket">
         <rosparam file="$(find tvc_simulator)/config/rocket_parameters.yaml"/>
@@ -20,8 +18,9 @@
         <rosparam file="$(find tvc_simulator)/config/prototypes/drone/visualization_parameters.yaml"/>
     </group>
 
-    <node machine="raspberrypi" name="actuators_tests" pkg="tvc_simulator" type="actuators_tests" output="screen"/>
-    <node machine="raspberrypi" name="time_keeper" pkg="tvc_simulator" type="time_keeper" cwd="node"/>
+   <!--  <node machine="raspberrypi" name="avionic_bridge" pkg="tvc_simulator" type="avionic_bridge.py" />-->
+     <!--  <node machine="raspberrypi" name="actuators_tests" pkg="tvc_simulator" type="actuators_tests" output="screen"/>-->
+     <!--  <node machine="raspberrypi" name="time_keeper" pkg="tvc_simulator" type="time_keeper" cwd="node"/>-->
 
     <!--  <node name="guidance" pkg="tvc_simulator" type="drone_guidance" output ="screen"  />-->
 <!--    <node name="fast_integrator" pkg="tvc_simulator" type="fast_integrator" cwd = "node" output ="screen"/>-->
