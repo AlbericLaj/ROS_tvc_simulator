@@ -38,8 +38,8 @@ def control_callback(control):
     pi.set_servo_pulsewidth(pitch_pin, pitch_DC) # update position
     pi.set_servo_pulsewidth(yaw_pin, yaw_DC) # update position
 
-    pi.set_servo_pulsewidth(top_motor_pin, 1200)
-    pi.set_servo_pulsewidth(bottom_motor_pin, 1200)
+    pi.set_servo_pulsewidth(top_motor_pin, top_motor_DC)
+    pi.set_servo_pulsewidth(bottom_motor_pin, bottom_motor_DC)
 
 if __name__ == '__main__':
 

@@ -201,6 +201,7 @@ include_directories(
 catkin_install_python(PROGRAMS
         scripts/aerodynamic.py
         scripts/disturbance.py
+        bash_scripts/on_pi/actuators_tests.py
         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
         )
 

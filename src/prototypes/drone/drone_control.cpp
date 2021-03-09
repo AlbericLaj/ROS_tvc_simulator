@@ -456,11 +456,11 @@ int main(int argc, char **argv) {
 
     // Init MPC ----------------------------------------------------------------------------------------------------------------------
     // Creates solver
-    using mpc_t = MPC<control_ocp, MySolver, osqp_solver_t>;
+    using mpc_t = MPC<control_ocp, MySolver, admm>;
     mpc_t mpc;
 
-    mpc.settings().max_iter = 6;
-    mpc.settings().line_search_max_iter = 5;
+    mpc.settings().max_iter = 3;
+    mpc.settings().line_search_max_iter = 4;
 
     // Input constraints
     const double inf = std::numeric_limits<double>::infinity();
@@ -575,7 +575,7 @@ int main(int argc, char **argv) {
             mpc.solve();
             time_now = 1000 * (ros::Time::now().toSec() - time_now);
 
-//            ROS_INFO("Ctr T= %.2f ms, st: %d, iter: %d", time_now, mpc.info().status.value, mpc.info().iter);
+            ROS_INFO("Ctr T= %.2f ms, st: %d, iter: %d", time_now, mpc.info().status.value, mpc.info().iter);
             average_status.push_back(mpc.info().status.value);
             average_time.push_back(time_now);
 
