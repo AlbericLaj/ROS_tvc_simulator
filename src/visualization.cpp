@@ -27,6 +27,15 @@ void rocket_stateCallback(const tvc_simulator::State::ConstPtr &rocket_state) {
     current_state.propeller_mass = rocket_state->propeller_mass;
 }
 
+// Global variable with last received rocket navigation state
+tvc_simulator::State current_nav_state;
+
+void rocket_nav_stateCallback(const tvc_simulator::State::ConstPtr &rocket_state) {
+    current_nav_state.pose = rocket_state->pose;
+    current_nav_state.twist = rocket_state->twist;
+    current_nav_state.propeller_mass = rocket_state->propeller_mass;
+}
+
 // global variable with last received rocket control
 tvc_simulator::Control current_control;
 
@@ -98,6 +107,7 @@ int main(int argc, char **argv) {
 
     // Subscribe to state message
     ros::Subscriber rocket_state_sub = n.subscribe("rocket_state", 1000, rocket_stateCallback);
+    ros::Subscriber rocket_nav_state_sub = n.subscribe("kalman_rocket_state", 1000, rocket_nav_stateCallback);
     ros::Subscriber control_sub = n.subscribe("control_pub", 1000, controlCallback);
     ros::Subscriber mpc_horizon_sub = n.subscribe("mpc_horizon", 1000, mpcHorizonCallback);
     ros::Subscriber target_trajectory_sub = n.subscribe("target_trajectory", 1000, targetTrajCallback);
@@ -120,12 +130,13 @@ int main(int argc, char **argv) {
     transformStamped.transform.rotation.z = q.z();
     transformStamped.transform.rotation.w = q.w();
 
-    visualization_msgs::Marker rocket_marker, thrust_vector, mpc_horizon, target_trajectory;
+    visualization_msgs::Marker rocket_marker, thrust_vector, mpc_horizon, target_trajectory, kalman_marker;
 
     float stl_alpha;
     n.getParam("/visualization/stl_alpha", stl_alpha);
 
     init_marker(rocket_marker, "rocket marker", 0.75, 0.75, 0.75, stl_alpha);
+    init_marker(kalman_marker, "rocket kalman marker", 0.75, 0.75, 0.75, 0.5);
     init_marker(thrust_vector, "thrust vector", 1, 0.5, 0);
     init_marker(mpc_horizon, "mpc horizon", 0.1, 0.3, 0.7, 0.4);
     init_marker(target_trajectory, "target trajectory", 0.15, 0.5, 0.25, 0.4);
@@ -142,6 +153,15 @@ int main(int argc, char **argv) {
     rocket_marker.scale.x = stl_scale;
     rocket_marker.scale.y = stl_scale;
     rocket_marker.scale.z = stl_scale;
+
+    //setup rocket marker from kalman state
+    kalman_marker.type = visualization_msgs::Marker::MESH_RESOURCE;
+    kalman_marker.mesh_resource = "package://tvc_simulator/rviz/"+stl_name;
+
+    // Set the scale of the marker -- 1x1x1 here means 1m on a side
+    kalman_marker.scale.x = stl_scale;
+    kalman_marker.scale.y = stl_scale;
+    kalman_marker.scale.z = stl_scale;
 
     //thrust vector
     const float shaft_diameter = 0.1;
@@ -177,6 +197,12 @@ int main(int argc, char **argv) {
 
         rocket_marker.header.stamp = ros::Time::now();
         rocket_marker.lifetime = ros::Duration();
+
+        kalman_marker.pose.position = current_nav_state.pose.position;
+        kalman_marker.pose.orientation = current_nav_state.pose.orientation;
+
+        kalman_marker.header.stamp = ros::Time::now();
+        kalman_marker.lifetime = ros::Duration();
 
         //update the position of the body frame
         transformStamped.transform.translation.x = current_state.pose.position.x;
@@ -255,6 +281,7 @@ int main(int argc, char **argv) {
         viz_pub.publish(thrust_vector);
         viz_pub.publish(mpc_horizon);
         viz_pub.publish(target_trajectory);
+        viz_pub.publish(kalman_marker);
         ros::spinOnce();
 
         r.sleep();
