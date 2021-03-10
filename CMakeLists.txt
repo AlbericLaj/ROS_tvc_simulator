@@ -265,9 +265,9 @@ add_executable(guidance src/guidance.cpp)
 target_link_libraries(guidance Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
 add_dependencies(guidance ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
-add_executable(data_fusion src/data_fusion.cpp)
-target_link_libraries(data_fusion ${catkin_LIBRARIES})
-add_dependencies(data_fusion ${${PROJECT_NAME}_EXPORTED_TARGETS})
+add_executable(navigation src/navigation.cpp)
+target_link_libraries(navigation ${catkin_LIBRARIES})
+add_dependencies(navigation ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(fast_integrator src/fast_integrator.cpp)
 target_link_libraries(fast_integrator Eigen3::Eigen ${catkin_LIBRARIES})
