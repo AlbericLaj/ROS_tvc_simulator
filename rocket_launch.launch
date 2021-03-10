@@ -17,8 +17,8 @@
   </group>
 ''
 
-  <node name="control" pkg="tvc_simulator" type="control" output ="screen"/>
-  <node name="guidance" pkg="tvc_simulator" type="guidance" output ="screen"/>
+  <node name="control" pkg="tvc_simulator" type="control"/>
+  <node name="guidance" pkg="tvc_simulator" type="guidance"/>
   <node name="aerodynamic" pkg="tvc_simulator" type="aerodynamic.py" cwd = "node" />
   <node name="disturbance" pkg="tvc_simulator" type="disturbance.py" cwd = "node"/>
   <node name="navigation" pkg="tvc_simulator" type="navigation" cwd = "node" output ="screen"/>

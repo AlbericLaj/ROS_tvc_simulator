@@ -23,7 +23,6 @@
 #include <type_traits>
 
 
-
 // Global variable with last received fsm
 tvc_simulator::FSM current_fsm;
 
@@ -32,6 +31,9 @@ tvc_simulator::Control current_control;
 
 // Global variable with last received sensor data
 tvc_simulator::Sensor current_sensor;
+
+// Global variable with last received real state from simulator
+tvc_simulator::State current_rocket_state;
 
 
 template<typename scalar_t>
@@ -65,7 +67,7 @@ class EKF {
 
 		void init_EKF()
 		{
-			X << 0.0, 0.0, 0.0,    0.0, 0.0, 0.0,    0.0, 0.0, 0.0, 1.0,    0.0, 0.0, 0.0,   6;
+			X << 0.0, 0.0, 0.0,    0.0, 0.0, 0.0,    0.0, 0.0348994666481, 0.0, 0.999390828069,    0.0, 0.0, 0.0,   6;
 
 			/** initialize derivatives */
 			int div_size = X.size();
@@ -98,7 +100,6 @@ class EKF {
 
 			Eigen::Matrix<double, 3, 1> total_torque;
 			total_torque << current_control.torque.x, current_control.torque.y, current_control.torque.z;
-			total_torque << 0.0, 0.0, 0.0;
 			
 			const double Isp = 213;
 
@@ -115,7 +116,7 @@ class EKF {
 			Eigen::Matrix<T, 3, 1> gravity; gravity << 0, 0, g0*mass;
 
 			// Total force in inertial frame [N]
-			Eigen::Matrix<T, 3, 1> total_force;  total_force = rocket_control-gravity;
+			Eigen::Matrix<T, 3, 1> total_force;  total_force = rot_matrix*rocket_control-gravity;
 
 			// Angular velocity omega in quaternion format to compute quaternion derivative
 			Eigen::Quaternion<T> omega_quat(0.0, x(10), x(11), x(12));
@@ -128,6 +129,10 @@ class EKF {
 			// Speed variation is Force/mass
 			xdot.segment(3,3) = total_force/mass;
 
+			Matrix<T, 3, 1> measured_acc; measured_acc << current_sensor.IMU_acc.x, current_sensor.IMU_acc.y, current_sensor.IMU_acc.z; 
+			xdot.segment(3,3) = 0.5*(xdot.segment(3,3) + rot_matrix*measured_acc - gravity/mass);
+			//xdot.segment(3,3) = rot_matrix*measured_acc - gravity/mass;
+
 			// Quaternion variation is 0.5*w◦q
 			xdot.segment(6, 4) =  0.5*(omega_quat*attitude).coeffs();
 
@@ -137,6 +142,7 @@ class EKF {
 			// Mass variation is proportional to total thrust
 			xdot(13) = -rocket_control.norm()/(Isp*g0);
 		}
+
 
 		template<typename T>
 		void sensor_estimation(const state_t<T>& x, state_t<T>& z_est, const double &t)
@@ -177,7 +183,7 @@ class EKF {
 		}
 
 		void predict_step()
-		{
+		{ 
 			static double last_predict_time = ros::Time::now().toSec();
 
 			double dT = ros::Time::now().toSec() - last_predict_time;
@@ -198,6 +204,7 @@ class EKF {
 
 		void update_step(Matrix<double, 7, 1> z)
 		{
+			/*
 			ad_state_t Z_Est;
 
 			// propagate through the function
@@ -215,7 +222,33 @@ class EKF {
 
 			X = X + K*(z - Z_Est.head(7));
 
+			P = P - K*Jac_h*P;
+
 			std::cout << (z - Z_Est.head(7)).transpose() << "\n\n";
+
+			*/
+
+				
+			// Orientation of the rocket with quaternion
+			Eigen::Quaternion<double> attitude(X(9).value(), X(6).value(), X(7).value(), X(8).value());
+			attitude.normalize();
+			Eigen::Matrix<double, 3, 3> rot_matrix = attitude.toRotationMatrix();
+
+			Matrix<double, 3,1> inertial_gyro = rot_matrix*z.segment(3,3);
+
+			X(10).value() = 0.5*(X(10).value() + inertial_gyro(0));
+			X(11).value() = 0.5*(X(11).value() + inertial_gyro(1));
+			X(12).value() = 0.5*(X(12).value() + inertial_gyro(2));
+
+			//X(0).value() = current_rocket_state.pose.position.x;
+			//X(1).value() = current_rocket_state.pose.position.y;
+			X(2).value() = 0.5*(X(2).value() + z(6));
+
+			// X(6).value() = current_rocket_state.pose.orientation.x;
+			// X(7).value() = current_rocket_state.pose.orientation.y;
+			// X(8).value() = current_rocket_state.pose.orientation.z;
+			// X(9).value() = current_rocket_state.pose.orientation.w;
+			
 		}
 
 
@@ -236,6 +269,13 @@ void controlCallback(const tvc_simulator::Control::ConstPtr& control)
 	current_control.force = control->force;
 }
 
+// Callback function to store last received state
+void rocket_stateCallback(const tvc_simulator::State::ConstPtr& rocket_state)
+{
+	current_rocket_state.pose = rocket_state->pose;
+ 	current_rocket_state.twist = rocket_state->twist;
+  	current_rocket_state.propeller_mass = rocket_state->propeller_mass;
+}
 
 // Callback function to store last received sensor data
 void sensorCallback(const tvc_simulator::Sensor::ConstPtr& sensor)
@@ -245,9 +285,9 @@ void sensorCallback(const tvc_simulator::Sensor::ConstPtr& sensor)
 	current_sensor.baro_height = sensor->baro_height;
 
 	Matrix<double, 7, 1> new_data;
-	new_data << 	sensor->IMU_acc.x, sensor->IMU_acc.y, sensor->IMU_acc.z,  
-			sensor->IMU_gyro.x, sensor->IMU_gyro.y, sensor->IMU_gyro.z,  
-			sensor->baro_height;
+	new_data << sensor->IMU_acc.x, sensor->IMU_acc.y, sensor->IMU_acc.z,  
+				sensor->IMU_gyro.x, sensor->IMU_gyro.y, sensor->IMU_gyro.z,  
+				sensor->baro_height;
 
 	kalman.update_step(new_data);
 }
@@ -268,6 +308,9 @@ int main(int argc, char **argv)
 	// Subscribe to control for kalman estimator
 	ros::Subscriber control_sub = n.subscribe("control_pub", 100, controlCallback);
 
+	// Subscribe to state message from simulation
+  	ros::Subscriber rocket_state_sub = n.subscribe("rocket_state", 100, rocket_stateCallback);
+
 	// Subscribe to sensor for kalman correction
 	ros::Subscriber sensor_sub = n.subscribe("sensor_pub", 100, sensorCallback);
 
@@ -279,9 +322,10 @@ int main(int argc, char **argv)
 	kalman.init_EKF();
 
 	// Thread to compute kalman. Duration defines interval time in seconds
-	ros::Timer control_thread = n.createTimer(ros::Duration(0.100),
+	ros::Timer control_thread = n.createTimer(ros::Duration(0.010),
 	[&](const ros::TimerEvent&) 
 	{
+		//double time_now = ros::Time::now().toSec();
 
 
 	// State machine ------------------------------------------
@@ -318,6 +362,8 @@ int main(int argc, char **argv)
 
 
 		kalman_pub.publish(kalman_state);
+
+		//std::cout << 1000*(ros::Time::now().toSec()-time_now) << "\n";
 
 	});
 

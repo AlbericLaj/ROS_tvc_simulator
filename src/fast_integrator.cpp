@@ -240,7 +240,7 @@ void dynamics_flight(const state& x, state& xdot, const double &t)
   xdot.head(3) = x.segment(3,3);
 
   // Speed variation is Force/mass
-  xdot.segment(3,3) = total_force/mass;  
+  xdot.segment(3,3) = total_force/mass;
 
   // Quaternion variation is 0.5*w◦q
   xdot.segment(6, 4) =  0.5*(omega_quat*attitude).coeffs();
@@ -468,6 +468,8 @@ int main(int argc, char **argv)
     current_state.propeller_mass = X0(13);
 
     rocket_state_pub.publish(current_state);
+
+    //std::cout << current_state.twist.angular << "\n";
 
     //std::cout << "Fast integration time: " << 1000*(ros::Time::now().toSec()-time_now) << "ms \n";
   });
