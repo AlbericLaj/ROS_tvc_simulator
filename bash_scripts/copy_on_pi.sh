@@ -17,7 +17,7 @@ scp -i ~/.ssh/id_rsa -r ../src/prototypes/drone/* pi@raspberrypi.local:~/ros_cat
 scp -i ~/.ssh/id_rsa -r on_pi/CMakeLists.txt  pi@raspberrypi.local:~/ros_catkin_ws/src/drone_tvc_simulator
 
 
-#scp -i ~/.ssh/id_rsa -r on_pi/remote_env_loader.sh  pi@raspberrypi.local:~/ros_catkin_ws/devel
+scp -i ~/.ssh/id_rsa -r on_pi/remote_env_loader.sh  pi@raspberrypi.local:~/ros_catkin_ws/devel
 
 #copy PolyMPC
 #scp -i ~/.ssh/id_rsa -r ../submodule  pi@raspberrypi.local:~/ros_catkin_ws/src/drone_tvc_simulator/submodule

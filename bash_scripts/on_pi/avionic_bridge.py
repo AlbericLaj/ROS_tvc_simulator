@@ -20,7 +20,7 @@ def control_callback(control):
 
     # saturate inputs
     control.servo1 = min(max(control.servo1, -0.8), 0.8)
-    control.servo1 = min(max(control.servo1, -0.8), 0.8)
+    control.servo2 = min(max(control.servo2, -0.8), 0.8)
 
     # saturate at 60% //TODO increase
     top_motor_cmd = min(max(top_motor_cmd, 0), 60)
@@ -28,11 +28,13 @@ def control_callback(control):
 
 
     # convert to PWM
-    yaw_DC = ((control.servo1/np.pi) + 1.45)*1000
+    yaw_DC = ((control.servo1/np.pi) + 1.455)*1000
     pitch_DC = ((control.servo2/np.pi) + 1.55)*1000
 
     top_motor_DC = top_motor_cmd*10 + 1000
     bottom_motor_DC = bottom_motor_cmd*10 + 1000
+    print(top_motor_DC, bottom_motor_DC)
+    print(yaw_DC, pitch_DC)
 
     # send to motors
     pi.set_servo_pulsewidth(pitch_pin, pitch_DC) # update position

@@ -53,3 +53,14 @@ sudo ln -s cmake-3.*your_version*/bin/* /usr/local/bin
 sudo apt install python3-pip
 pip3 install rospkg dataclasses scipy numpy pyqtgraph
 ```
+
+# 
+add at the end of your .bashrc file:
+source /opt/ros/melodic/setup.bash
+source ~/catkin_ws/devel/setup.sh
+
+to run across multiple machin, also add:
+export ROS_IP=*your local ip*
+export ROS_MASTER_URI=http://*your local ip*:11311
+
+

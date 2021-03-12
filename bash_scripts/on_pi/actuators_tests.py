@@ -13,21 +13,31 @@ from std_msgs.msg import String
 from tvc_simulator.srv import GetFSM
 
 # define the test sequence
-PERIODIC_SEQUENCE = False
+PERIODIC_SEQUENCE = True
 
 
-SERVO1_SEQUENCE = []
-SERVO2_SEQUENCE = []
+TIME_SEQUENCE = [2, 2]
+SERVO1_SEQUENCE = [0, 0]
+SERVO2_SEQUENCE = [30, -30]
 
-TOP_SEQUENCE = range(0, 61, 10)
-BOTTOM_SEQUENCE = range(0, 61, 10)
+TOP_SEQUENCE = []
+BOTTOM_SEQUENCE = []
+# TOP_SEQUENCE = [0, 5]
+# BOTTOM_SEQUENCE = [0, 5]
 
-TIME_SEQUENCE = len(TOP_SEQUENCE)*[3]
+# TOP_SEQUENCE = [0, 50] + list(range(55, 71, 5))
+# BOTTOM_SEQUENCE = [0, 50] + list(range(55, 71, 5))
 
 
-TOP_SEQUENCE = [30]
-BOTTOM_SEQUENCE = [30]
-TIME_SEQUENCE = [3]
+TOP_SEQUENCE = [0, 50]
+# BOTTOM_SEQUENCE = [0, 50]
+
+#TIME_SEQUENCE = (len(TOP_SEQUENCE))*[3]
+# TIME_SEQUENCE = [3, 1000]
+
+# TOP_SEQUENCE = [30]
+# BOTTOM_SEQUENCE = [30]
+# TIME_SEQUENCE = [3]
 
 previous_state = DroneState()
 current_state = DroneState()
@@ -69,9 +79,13 @@ if __name__ == '__main__':
         resp = client_fsm()
         current_fsm = resp.fsm
         # rospy.loginfo(current_fsm)
+        control_law.servo1 = 0
+        control_law.servo2 = 0
+        control_law.top = 0
+        control_law.bottom = 0
         if current_fsm.state_machine == "Idle":
             pass
-        elif current_fsm.state_machine == "Launch":
+        elif current_fsm.state_machine == "Launch" and seq_idx != -10:
             if seq_time_start is None:
                 seq_time_start = current_fsm.time_now
             if current_fsm.time_now - seq_time_start > TIME_SEQUENCE[seq_idx]:
@@ -81,6 +95,7 @@ if __name__ == '__main__':
                     if PERIODIC_SEQUENCE:
                         seq_idx = 0
                     else:
+                        seq_idx = -10
                         coast_command = String("Coast")
                         coast_pub.publish(coast_command)
                         continue
@@ -89,8 +104,7 @@ if __name__ == '__main__':
             control_law.top = (TOP_SEQUENCE[seq_idx] if seq_idx < len(TOP_SEQUENCE) else 0)
             control_law.bottom = (BOTTOM_SEQUENCE[seq_idx] if seq_idx < len(BOTTOM_SEQUENCE) else 0)
 
-            kp = 1
-            # kd = kp/10
+            kp = 20
             kd = 0
             pd_control = -current_state.pose.orientation.z * kp - (current_state.pose.orientation.z - previous_state.pose.orientation.y) * kd
             # TODO check orientation
@@ -98,9 +112,5 @@ if __name__ == '__main__':
             control_law.bottom -= pd_control
 
         elif current_fsm.state_machine == "Coast":
-            control_law.servo1 = 0
-            control_law.servo2 = 0
-            control_law.top = 0
-            control_law.bottom = 0
             pass
         drone_control_pub.publish(control_law)
