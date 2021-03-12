@@ -130,7 +130,7 @@ time_point get_time() {
 using Polynomial = polympc::Chebyshev<POLY_ORDER, polympc::GAUSS_LOBATTO, double>;
 using Approximation = polympc::Spline<Polynomial, NUM_SEG>;
 
-POLYMPC_FORWARD_DECLARATION(/*Name*/ control_ocp, /*NX*/ 13, /*NU*/ 4, /*NP*/ 0, /*ND*/ 0, /*NG*/0, /*TYPE*/ double)
+POLYMPC_FORWARD_DECLARATION(/*Name*/ control_ocp, /*NX*/ 15, /*NU*/ 4, /*NP*/ 0, /*ND*/ 0, /*NG*/0, /*TYPE*/ double)
 
 
 #define X_COST 1e5
@@ -138,9 +138,11 @@ POLYMPC_FORWARD_DECLARATION(/*Name*/ control_ocp, /*NX*/ 13, /*NU*/ 4, /*NP*/ 0,
 #define ATT_COST 1e0
 #define D_ATT_COST 1e-1
 
-#define SERVO_COST 10000
+#define SERVO_CMD_COST 10000
 #define THRUST_COST 100
 #define TORQUE_COST 1
+
+#define SERVO_COST 10000
 
 class control_ocp : public ContinuousOCP<control_ocp, Approximation, SPARSE> {
 public:
@@ -149,13 +151,13 @@ public:
     static constexpr double t_start = 0.0;
     static constexpr double t_stop = CONTROL_HORIZON;
 
-    Eigen::DiagonalMatrix<scalar_t, 13> Q{X_COST, X_COST, X_COST, D_X_COST, D_X_COST, D_X_COST, ATT_COST, ATT_COST,
-                                          ATT_COST, ATT_COST, D_ATT_COST, D_ATT_COST, D_ATT_COST};
-    Eigen::DiagonalMatrix<scalar_t, 4> R{SERVO_COST, SERVO_COST, THRUST_COST, TORQUE_COST};
-    Eigen::DiagonalMatrix<scalar_t, 13> QN{X_COST, X_COST, X_COST, D_X_COST, D_X_COST, D_X_COST, ATT_COST, ATT_COST,
-                                           ATT_COST, ATT_COST, D_ATT_COST, D_ATT_COST, D_ATT_COST};
+    Eigen::DiagonalMatrix<scalar_t, 15> Q{X_COST, X_COST, X_COST, D_X_COST, D_X_COST, D_X_COST, ATT_COST, ATT_COST,
+                                          ATT_COST, ATT_COST, D_ATT_COST, D_ATT_COST, D_ATT_COST, SERVO_COST, SERVO_COST};
+    Eigen::DiagonalMatrix<scalar_t, 4> R{SERVO_CMD_COST, SERVO_CMD_COST, THRUST_COST, TORQUE_COST};
+    Eigen::DiagonalMatrix<scalar_t, 15> QN{X_COST, X_COST, X_COST, D_X_COST, D_X_COST, D_X_COST, ATT_COST, ATT_COST,
+                                           ATT_COST, ATT_COST, D_ATT_COST, D_ATT_COST, D_ATT_COST, SERVO_COST, SERVO_COST};
 
-    Eigen::Matrix<scalar_t, 13, 1> xs;
+    Eigen::Matrix<scalar_t, 15, 1> xs;
     Eigen::Matrix<scalar_t, 4, 1> us;
 
     template<typename T>
@@ -182,9 +184,9 @@ public:
 
         // servomotors thrust vector rotation (see drone_interface for equivalent quaternion implementation)
         Eigen::Matrix<T, 3, 1> rocket_force;
-        rocket_force << (T) input(2) * sin(input(1)),
-                (T) -input(2) * cos(input(1)) * sin(input(0)),
-                (T) input(2) * cos(input(0)) * cos(input(1));
+        rocket_force << (T) input(2) * sin(x(14)),
+                (T) -input(2) * cos(x(14)) * sin(x(13)),
+                (T) input(2) * cos(x(13)) * cos(x(14));
 
         // Force in inertial frame: gravity
         Eigen::Matrix<T, 3, 1> gravity;
@@ -215,6 +217,9 @@ public:
         // Angular speed variation is Torque/Inertia
         xdot.segment(10, 3) = rot_matrix * (rocket_torque.cwiseProduct(J_inv));
 
+        //servo first order model
+        xdot(13) = (T) -9.662 * x(13) + (T) 9.662 * input(0);
+        xdot(14) = (T) -9.662 * x(14) + (T) 9.662 * input(1);
     }
 
 //    template<typename T>
@@ -231,13 +236,13 @@ public:
                                    const Eigen::Ref<const parameter_t <T>> p,
                                    const Eigen::Ref<const static_parameter_t> d,
                                    const scalar_t &t, T &lagrange) noexcept {
-        Eigen::Matrix<T, 13, 13> Qm = Q.toDenseMatrix().template cast<T>();
+        Eigen::Matrix<T, 15, 15> Qm = Q.toDenseMatrix().template cast<T>();
         Eigen::Matrix<T, 4, 4> Rm = R.toDenseMatrix().template cast<T>();
 
-        Eigen::Matrix<T, 13, 1> x_error = x - xs.template cast<T>();
+        Eigen::Matrix<T, 15, 1> x_error = x - xs.template cast<T>();
         Eigen::Matrix<T, 4, 1> u_error = u - us.template cast<T>();
 
-
+        //TODO use diag directly
         lagrange = x_error.dot(Qm * x_error) + u_error.dot(Rm * u_error);
 
     }
@@ -246,10 +251,11 @@ public:
     inline void mayer_term_impl(const Eigen::Ref<const state_t <T>> x, const Eigen::Ref<const control_t <T>> u,
                                 const Eigen::Ref<const parameter_t <T>> p, const Eigen::Ref<const static_parameter_t> d,
                                 const scalar_t &t, T &mayer) noexcept {
-        Eigen::Matrix<T, 13, 13> Qm = QN.toDenseMatrix().template cast<T>();
+        Eigen::Matrix<T, 15, 15> Qm = QN.toDenseMatrix().template cast<T>();
 
-        Eigen::Matrix<T, 13, 1> x_error = x - xs.template cast<T>();
+        Eigen::Matrix<T, 15, 1> x_error = x - xs.template cast<T>();
 
+        //TODO use diag directly
         mayer = x_error.dot(Qm * x_error);
     }
 };
@@ -485,12 +491,14 @@ int main(int argc, char **argv) {
     lbx << -inf, -inf, -1.0 / 100,
             -inf, -inf, -inf,
             -0.183 - eps, -0.183 - eps, -0.183 - eps, -1 - eps,
-            -inf, -inf, -inf;
+            -inf, -inf, -inf,
+            -rocket.maxServo1Angle, -rocket.maxServo2Angle;
 
     ubx << inf, inf, inf,
             inf, inf, inf,
             0.183 + eps, 0.183 + eps, 0.183 + eps, 1 + eps,
-            inf, inf, inf;
+            inf, inf, inf,
+            rocket.maxServo1Angle, rocket.maxServo2Angle;
 
 //    lbx << -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf;
 //    ubx << inf, inf, inf, inf, inf, inf, inf, inf, inf, inf, inf, inf, inf;
@@ -502,7 +510,8 @@ int main(int argc, char **argv) {
     x0 << 0, 0, 0,
             0, 0, 0,
             0, 0, 0, 1,
-            0, 0, 0;
+            0, 0, 0,
+            0, 0;
     mpc.x_guess(x0.replicate(13, 1));
 
     mpc_t::control_t target_control;
@@ -512,7 +521,8 @@ int main(int argc, char **argv) {
     target_state << 0, 4.0 / 100, 10.0 / 100,
             0, 0, 0,
             0, 0, 0, 1,
-            0, 0, 0;
+            0, 0, 0,
+            0, 0;
 
     // Variables to track performance over whole simulation
     std::vector<float> average_time;
@@ -521,8 +531,9 @@ int main(int argc, char **argv) {
     std::vector<double> average_y_error;
     std::vector<double> average_z_error;
 
+    double mpc_period = 0.05;
     // Thread to compute control. Duration defines interval time in seconds
-    ros::Timer control_thread = n.createTimer(ros::Duration(0.05), [&](const ros::TimerEvent &) {
+    ros::Timer control_thread = n.createTimer(ros::Duration(mpc_period), [&](const ros::TimerEvent &) {
 
         // Get current FSM and time
         if (client_fsm.call(srv_fsm)) {
@@ -542,7 +553,8 @@ int main(int argc, char **argv) {
             target_state << srv_waypoint.response.target_point.position.x * 1e-2, srv_waypoint.response.target_point.position.y * 1e-2, srv_waypoint.response.target_point.position.z * 1e-2,
                     srv_waypoint.response.target_point.speed.x * 1e-2, srv_waypoint.response.target_point.speed.y * 1e-2, srv_waypoint.response.target_point.speed.z * 1e-2,
                     current_state.pose.orientation.x, current_state.pose.orientation.y, current_state.pose.orientation.z,current_state.pose.orientation.w,
-                    current_state.twist.angular.x, current_state.twist.angular.y, current_state.twist.angular.z;
+                    current_state.twist.angular.x, current_state.twist.angular.y, current_state.twist.angular.z,
+                    0, 0;
 
             //TODO
             target_control <<  0, 0, 0, 0;
@@ -550,7 +562,8 @@ int main(int argc, char **argv) {
             target_state << target_apogee.x * 1e-2, target_apogee.y * 1e-2, target_apogee.z * 1e-2,
                     0, 0, 0,
                     0, 0, 0, 1,
-                    0, 0, 0;
+                    0, 0, 0,
+                    0, 0;
             target_control << 0, 0, 0, 0;
         }
 
@@ -566,7 +579,9 @@ int main(int argc, char **argv) {
                     current_state.twist.linear.x / 100, current_state.twist.linear.y / 100,
                     current_state.twist.linear.z / 100,
                     current_state.pose.orientation.x, current_state.pose.orientation.y, current_state.pose.orientation.z, current_state.pose.orientation.w,
-                    current_state.twist.angular.x, current_state.twist.angular.y, current_state.twist.angular.z;
+                    current_state.twist.angular.x, current_state.twist.angular.y, current_state.twist.angular.z,
+                    //use previously predicted servo positions
+                    mpc.solution_x_at(mpc_period)(13), mpc.solution_x_at(mpc_period)(14);
 
             mpc.initial_conditions(x0);
 
@@ -593,8 +608,8 @@ int main(int argc, char **argv) {
                 set_PD_control_law(control_law);
 
                 //reset mpc guess
-                mpc.x_guess(x0.replicate(13, 1));
-                mpc.u_guess(target_control.replicate(13, 1));
+                mpc.x_guess(x0.replicate(15, 1));
+                mpc.u_guess(target_control.replicate(15, 1));
             } else {
                 // Apply MPC control
                 control_law.servo1 = control_MPC[0];
