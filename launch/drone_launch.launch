@@ -16,6 +16,7 @@
     <rosparam file="$(find tvc_simulator)/config/prototypes/drone/visualization_parameters.yaml" />
   </group>
 ''
+<!--  <node name="actuators_tests" pkg="tvc_simulator" type="actuators_tests.py" output="screen"/>-->
 
   <node name="control" pkg="tvc_simulator" type="drone_control" output ="screen"/>
   <node name="control_interface" pkg="tvc_simulator" type="control_interface" cwd = "node"/>
@@ -26,7 +27,7 @@
   <node name="time_keeper" pkg="tvc_simulator" type="time_keeper" cwd = "node"/>
 
   <node name="visualization" pkg="tvc_simulator" type="visualization" />
-  <node name="rocket_state" pkg="rostopic" type="rostopic" args="echo /rocket_state"  /> 
+  <node name="rocket_state" pkg="rostopic" type="rostopic" args="echo /rocket_state"  />
   <node name="rqt_gui" pkg="rqt_gui" type="rqt_gui" args="--perspective-file $(find tvc_simulator)/rviz/drone_GUI.perspective"/>
 
 </launch>
