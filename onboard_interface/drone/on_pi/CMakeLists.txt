@@ -24,7 +24,7 @@ add_definitions(-DEIGEN_STACK_ALLOCATION_LIMIT=1000000) # 1 MB
 
 
 add_subdirectory(submodule/polympc)
-include_directories(submodule/polympc/src src src/prototypes/drone)
+include_directories(submodule/polympc/src src)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -33,17 +33,13 @@ include_directories(submodule/polympc/src src src/prototypes/drone)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-        roscpp
-        rospy
-        roslib
-        std_msgs
-        message_generation
-        geometry_msgs
-        genmsg
-        visualization_msgs
-        tf2_ros
-        #polympc-ros
-        )
+  roscpp
+  rospy
+  std_msgs
+  message_generation
+  geometry_msgs
+  genmsg
+)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -91,11 +87,11 @@ add_message_files(
 )
 
 ## Generate services in the 'srv' folder
-add_service_files(
-        FILES
-        GetFSM.srv
-        GetWaypoint.srv
-)
+ add_service_files(
+   FILES
+   GetFSM.srv
+   GetWaypoint.srv
+ )
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -105,11 +101,10 @@ add_service_files(
 # )
 
 ## Generate added messages and services with any dependencies listed here
-generate_messages(
-        DEPENDENCIES
-        std_msgs
-        geometry_msgs
-        #visualization_msgs
+ generate_messages(
+   DEPENDENCIES
+   std_msgs
+   geometry_msgs
 )
 
 ################################################
@@ -142,10 +137,10 @@ generate_messages(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-        #  INCLUDE_DIRS include
-        #  LIBRARIES tvc_simulator
-        CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs #polympc-ros
-        #  DEPENDS system_lib
+#  INCLUDE_DIRS include
+#  LIBRARIES tvc_simulator
+  CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs
+#  DEPENDS system_lib
 )
 
 ###########
@@ -155,8 +150,9 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-        include
-        ${catkin_INCLUDE_DIRS}
+	include
+ 	${catkin_INCLUDE_DIRS}
+  #-DCMAKE_TOOLCHAIN_FILE=/home/alberic/vcpkg/scripts/buildsystems/vcpkg.cmake
 )
 
 ## Declare a C++ library
@@ -198,12 +194,12 @@ include_directories(
 
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination
-catkin_install_python(PROGRAMS
-        scripts/aerodynamic.py
-        scripts/disturbance.py
-        onboard_interface/drone/on_pi/actuators_tests.py
-        DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-        )
+ catkin_install_python(PROGRAMS
+   scripts/avionic_bridge.py
+   scripts/actuators_tests.py
+   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+	
+ )
 
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
@@ -250,40 +246,11 @@ add_executable(time_keeper src/time_keeper.cpp)
 target_link_libraries(time_keeper ${catkin_LIBRARIES})
 add_dependencies(time_keeper ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
-add_executable(control src/control.cpp)
-target_link_libraries(control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
-add_dependencies(control ${${PROJECT_NAME}_EXPORTED_TARGETS})
-
-add_executable(guidance src/guidance.cpp)
-target_link_libraries(guidance Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
-add_dependencies(guidance ${${PROJECT_NAME}_EXPORTED_TARGETS})
-
-add_executable(data_fusion src/data_fusion.cpp)
-target_link_libraries(data_fusion ${catkin_LIBRARIES})
-add_dependencies(data_fusion ${${PROJECT_NAME}_EXPORTED_TARGETS})
-
-add_executable(fast_integrator src/fast_integrator.cpp)
-target_link_libraries(fast_integrator Eigen3::Eigen ${catkin_LIBRARIES})
-add_dependencies(fast_integrator ${${PROJECT_NAME}_EXPORTED_TARGETS})
-
-add_executable(visualization src/visualization.cpp)
-target_link_libraries(visualization ${catkin_LIBRARIES})
-add_dependencies(visualization ${${PROJECT_NAME}_EXPORTED_TARGETS})
-
-
-add_executable(drone_control src/prototypes/drone/drone_control.cpp)
+add_executable(drone_control src/drone_control.cpp)
 target_link_libraries(drone_control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
 add_dependencies(drone_control ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
-add_executable(drone_guidance src/prototypes/drone/drone_guidance.cpp)
-target_link_libraries(drone_guidance Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
-add_dependencies(drone_guidance ${${PROJECT_NAME}_EXPORTED_TARGETS})
-
-add_executable(control_interface src/prototypes/drone/drone_interface.cpp)
-target_link_libraries(control_interface Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
-add_dependencies(control_interface ${${PROJECT_NAME}_EXPORTED_TARGETS})
-
-add_executable(actuators_tests onboard_interface/drone/on_pi/actuators_tests.cpp)
-target_link_libraries(actuators_tests Eigen3::Eigen ${catkin_LIBRARIES})
-add_dependencies(actuators_tests ${${PROJECT_NAME}_EXPORTED_TARGETS})
+add_executable(guidance src/drone_guidance.cpp)
+target_link_libraries(guidance Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
+add_dependencies(guidance ${${PROJECT_NAME}_EXPORTED_TARGETS})
 

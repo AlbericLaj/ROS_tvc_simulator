@@ -44,11 +44,13 @@ class Rocket
 
     float total_length;
 
+    float initial_speed;
+
     std::vector<float> target_apogee = {0, 0, 0};
     std::vector<float> Cd = {0, 0, 0};
     std::vector<float> surface = {0, 0, 0};
     std::vector<float> drag_coeff = {0, 0, 0};
-    
+
     std::vector<float> dry_Inertia{0, 0, 0};
     std::vector<float> total_Inertia{0, 0, 0};
 
@@ -85,7 +87,7 @@ class Rocket
 
       n.getParam("/rocket/dry_mass", dry_mass);
       n.getParam("/rocket/propellant_mass", propellant_mass);
-      
+
       n.getParam("/rocket/Cd", Cd);
       n.getParam("/rocket/dry_I", dry_Inertia);
 
@@ -94,9 +96,11 @@ class Rocket
 
       n.getParam("/environment/apogee", target_apogee);
 
+      n.getParam("/rocket/initial_speed", initial_speed);
+
       std::vector<float> diameter = {0, 0, 0};
       std::vector<float> length = {0, 0, 0};
-      
+
       int nStage;
 
       n.getParam("/rocket/diameters", diameter);
@@ -140,7 +144,7 @@ void rocket_controlCallback(const tvc_simulator::Control::ConstPtr& control_law)
   rocket_control << control_law->force.x,  control_law->torque.x,
                     control_law->force.y,  control_law->torque.y,
                     control_law->force.z,  control_law->torque.z;
-}   
+}
 
 // Callback function to store last received aero force and torque
 void rocket_aeroCallback(const tvc_simulator::Control::ConstPtr& rocket_aero)
@@ -148,7 +152,7 @@ void rocket_aeroCallback(const tvc_simulator::Control::ConstPtr& rocket_aero)
   aero_control <<   rocket_aero->force.x,  rocket_aero->torque.x,
                     rocket_aero->force.y,  rocket_aero->torque.y,
                     rocket_aero->force.z,  rocket_aero->torque.z;
-}   
+}
 
 // Callback function to store last received aero force and torque
 void rocket_perturbationCallback(const tvc_simulator::Control::ConstPtr& perturbation)
@@ -156,7 +160,7 @@ void rocket_perturbationCallback(const tvc_simulator::Control::ConstPtr& perturb
   perturbation_control <<   perturbation->force.x,  perturbation->torque.x,
                             perturbation->force.y,  perturbation->torque.y,
                             perturbation->force.z,  perturbation->torque.z;
-}   
+}
 
 // Callback function to store last received fsm
 void fsmCallback(const tvc_simulator::FSM::ConstPtr& fsm)
@@ -204,7 +208,7 @@ using state = state_t<double>;
 template<typename scalar_t>
 using control_t = Eigen::Matrix<scalar_t, 4, 1>;
 
-void dynamics_flight(const state& x, state& xdot, const double &t)  
+void dynamics_flight(const state& x, state& xdot, const double &t)
 {
   // -------------- Simulation variables -----------------------------
   double g0 = 3.986e14/pow(6371e3+x(2), 2);  // Earth gravity in [m/s^2]
@@ -214,7 +218,7 @@ void dynamics_flight(const state& x, state& xdot, const double &t)
   // Orientation of the rocket with quaternion
   Eigen::Quaternion<double> attitude( x(9), x(6), x(7), x(8)); attitude.normalize();
   Eigen::Matrix<double, 3, 3> rot_matrix = attitude.toRotationMatrix();
- 
+
 
   // Force in inertial frame: gravity
   Eigen::Matrix<double, 3, 1> gravity; gravity << 0, 0, g0*mass;
@@ -222,16 +226,16 @@ void dynamics_flight(const state& x, state& xdot, const double &t)
   // Total force in inertial frame [N]
   Eigen::Matrix<double, 3, 1> total_force;  total_force = rot_matrix*rocket_control.col(0) - gravity + aero_control.col(0) + perturbation_control.col(0);
   //std::cout << total_force.transpose() << "\n";
-  
+
 
   // Angular velocity omega in quaternion format to compute quaternion derivative
   Eigen::Quaternion<double> omega_quat(0.0, x(10), x(11), x(12));
   //std::cout << x.segment(10,3).transpose()*57.29 << "\n\n";
 
   // Tortal torque in body frame
-  Eigen::Matrix<double, 3, 1> I_inv; I_inv << 1/rocket.total_Inertia[0], 1/rocket.total_Inertia[1], 1/rocket.total_Inertia[2]; 
+  Eigen::Matrix<double, 3, 1> I_inv; I_inv << 1/rocket.total_Inertia[0], 1/rocket.total_Inertia[1], 1/rocket.total_Inertia[2];
 
-  Eigen::Matrix<double, 3, 1> total_torque; 
+  Eigen::Matrix<double, 3, 1> total_torque;
   total_torque = rocket_control.col(1) + rot_matrix.transpose()*(aero_control.col(1) + perturbation_control.col(1));
 
   // -------------- Differential equation ---------------------
@@ -240,7 +244,7 @@ void dynamics_flight(const state& x, state& xdot, const double &t)
   xdot.head(3) = x.segment(3,3);
 
   // Speed variation is Force/mass
-  xdot.segment(3,3) = total_force/mass;  
+  xdot.segment(3,3) = total_force/mass;
 
   // Quaternion variation is 0.5*w◦q
   xdot.segment(6, 4) =  0.5*(omega_quat*attitude).coeffs();
@@ -249,7 +253,12 @@ void dynamics_flight(const state& x, state& xdot, const double &t)
   xdot.segment(10, 3) = rot_matrix*(total_torque.cwiseProduct(I_inv));
 
   // Mass variation is proportional to total thrust
-  xdot(13) = -rocket_control.col(0).norm()/(rocket.Isp*g0);
+  if(rocket.Isp != -1){
+      xdot(13) = -rocket_control.col(0).norm()/(rocket.Isp*g0);
+  }
+  else{
+      xdot(13) = 0;
+  }
 
 
   // Fake sensor data update -----------------
@@ -270,7 +279,7 @@ void dynamics_flight(const state& x, state& xdot, const double &t)
   }
 
 
-void dynamics_rail(const state& x, state& xdot, const double &t)  
+void dynamics_rail(const state& x, state& xdot, const double &t)
 {
   // -------------- Simulation variables -----------------------------
   double g0 = 3.986e14/pow(6371e3+x(2), 2);  // Earth gravity in [m/s^2]
@@ -302,7 +311,7 @@ void dynamics_rail(const state& x, state& xdot, const double &t)
   xdot.head(3) = x.segment(3,3);
 
   // Speed variation is Force/mass
-  xdot.segment(3,3) = rot_matrix*total_force/mass;  
+  xdot.segment(3,3) = rot_matrix*total_force/mass;
 
   // Quaternion variation is zero to keep rail orientation
   xdot.segment(6, 4) << 0.5*(omega_quat*attitude).coeffs();
@@ -328,7 +337,7 @@ void dynamics_rail(const state& x, state& xdot, const double &t)
 
 
 typedef runge_kutta_dopri5< double > stepper_type;
-using stepper_type2 = runge_kutta_dopri5<state>; 
+using stepper_type2 = runge_kutta_dopri5<state>;
 
 
 int main(int argc, char **argv)
@@ -342,10 +351,10 @@ int main(int argc, char **argv)
   // Subscribe to control message from control node
   ros::Subscriber rocket_control_sub = n.subscribe("control_pub", 100, rocket_controlCallback);
 
-  // Subscribe to aero message 
+  // Subscribe to aero message
   ros::Subscriber rocket_aero_sub = n.subscribe("rocket_aero", 100, rocket_aeroCallback);
 
-  // Subscribe to perturbations message 
+  // Subscribe to perturbations message
   ros::Subscriber rocket_perturbation_sub = n.subscribe("disturbance_pub", 100, rocket_perturbationCallback);
 
   // Subscribe to time_keeper for fsm and time
@@ -362,7 +371,7 @@ int main(int argc, char **argv)
   tvc_simulator::GetFSM srv_fsm;
 
   /* ---------- Variable initialization  ---------- */
-  
+
   // Initialize rocket class with useful parameters
   rocket.init(n);
 
@@ -396,7 +405,7 @@ int main(int argc, char **argv)
 
   Quaterniond q(init_angle);
 
-  // Init state X   
+  // Init state X
   state X0;
   X0 << 0, 0, 0,   0, 0, 0,     0.0, 0.0 , 0.0 , 1.0 ,      0, 0, 0.0,    rocket.propellant_mass;
   X0.segment(6,4) = q.coeffs();
@@ -404,20 +413,20 @@ int main(int argc, char **argv)
   state xout = X0;
 
   // Init solver
-  float period_integration = 10e-3; 
-  stepper_type2 stepper;     
+  float period_integration = 10e-3;
+  stepper_type2 stepper;
 
   // Thread to integrate state. Duration defines interval time in seconds
-  ros::Timer integrator_thread = n.createTimer(ros::Duration(period_integration), [&](const ros::TimerEvent&) 
+  ros::Timer integrator_thread = n.createTimer(ros::Duration(period_integration), [&](const ros::TimerEvent&)
 	{
     // State machine ------------------------------------------
 		if (current_fsm.state_machine.compare("Idle") == 0)
 		{
-			
+
 		}
     else
     {
-      
+
       if (current_fsm.state_machine.compare("Rail") == 0)
       {
         stepper.do_step(dynamics_rail, X0, 0, xout, 0 + period_integration);
@@ -436,14 +445,14 @@ int main(int argc, char **argv)
         stepper.do_step(dynamics_flight, X0, 0, xout, 0 + period_integration);
       }
 
-      
+
       X0 = xout;
 
       rocket.update_CM(X0(13));
 
       send_fake_sensor(rocket_sensor_pub);
     }
-		
+
 
     // Parse state and publish it on the /fast_rocket_state topic
     tvc_simulator::State current_state;

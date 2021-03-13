@@ -32,16 +32,22 @@ bool sendFSM(tvc_simulator::GetFSM::Request &req, tvc_simulator::GetFSM::Respons
 	res.fsm.time_now = current_fsm.time_now;
 	res.fsm.state_machine = current_fsm.state_machine;
 
-	ROS_INFO("Request info: State = %s, time = %f", current_fsm.state_machine.c_str(), current_fsm.time_now);
+//	ROS_INFO("Request info: State = %s, time = %f", current_fsm.state_machine.c_str(), current_fsm.time_now);
 	
 	return true;
 }
 
+
+float rail_length = 0;
+
 void processCommand(const std_msgs::String &command){
-    current_fsm.state_machine = "Rail";
-    time_zero = ros::Time::now().toSec();
-    if(command.data.compare("Rail") == 0){
-        //TODO ?
+    if(command.data.compare("Coast") == 0){
+        current_fsm.state_machine = "Coast";
+    } else{
+        //received launch command
+        time_zero = ros::Time::now().toSec();
+        if (rail_length==0) current_fsm.state_machine = "Launch";
+        else current_fsm.state_machine = "Rail";
     }
 }
 
@@ -51,7 +57,6 @@ int main(int argc, char **argv)
 	// Init ROS time keeper node
 	ros::init(argc, argv, "time_keeper");
 	ros::NodeHandle n;
-
 
     // Subscribe to commands
     ros::Subscriber command_sub = n.subscribe("commands", 10, processCommand);
@@ -75,7 +80,6 @@ int main(int argc, char **argv)
 	timer_pub.publish(current_fsm);
 	time_zero = ros::Time::now().toSec();
 
-	float rail_length = 0;
 	n.getParam("/environment/rail_length", rail_length);
 
 	ros::Timer FSM_thread = n.createTimer(ros::Duration(0.01),
@@ -83,7 +87,6 @@ int main(int argc, char **argv)
 	{
 		// Update current time
 		current_fsm.time_now = ros::Time::now().toSec() - time_zero;
-
 		// Update FSM
 		if (current_fsm.state_machine.compare("Idle") == 0)
 		{

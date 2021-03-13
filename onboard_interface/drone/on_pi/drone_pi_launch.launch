@@ -1,0 +1,16 @@
+<launch>
+
+  <group ns="rocket">
+      <rosparam file="$(find tvc_simulator)/config/rocket_parameters.yaml" />
+  </group>
+
+  <node name="avionic_bridge" pkg="tvc_simulator" type="avionic_bridge.py" output ="screen"/>
+  <!-- <node name="actuators_tests" pkg="tvc_simulator" type="actuators_tests.py" output ="screen"/> -->
+  <node name="time_keeper" pkg="tvc_simulator" type="time_keeper" cwd = "node" />
+   <node name="control" pkg="tvc_simulator" type="drone_control" output ="screen"/>
+
+  <node pkg="rosbag" type="record" name="recorder" args="record -a -O $(find tvc_simulator)/log/log.bag"/>
+</launch>
+
+
+

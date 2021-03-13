@@ -15,18 +15,18 @@ sudo rosdep init
 rosdep update
 ```
 2. Install Eigen
+Download eigen version >3.4, open the folder in a terminal
 ```bash
-git clone https://gitlab.com/libeigen/eigen.git
-sudo cp -r -t /usr/local/include/ eigen/Eigen/ eigen/unsupported/
+sudo cp -r -t /usr/local/include/ Eigen/ unsupported/
 ```
 3. Install [OSQP](https://osqp.org/)
 ```bash
-git clone https://github.com/oxfordcontrol/osqp
+git clone --recursive https://github.com/oxfordcontrol/osqp
 cd osqp
 mkdir build
 cd build
 cmake -G "Unix Makefiles" ..
-cmake --build . --target install
+sudo cmake --build . --target install
 ```
 4. Install [OSQP-eigen](https://github.com/robotology/osqp-eigen)
 ```bash
@@ -39,12 +39,13 @@ sudo make install
 export OsqpEigen_DIR=/path/where/you/installed/
 ```
 
-5. You may need a cmake version >3.12. (Check with cmake --version). To install the latest version:
+5. You may need a cmake version >3.12 for "add_compile_definitions()". (Check with cmake --version). To install the latest version:
    Download the latest version from [here](https://cmake.org/download/) and copy the script in /opt/.
 ```bash
-chmod +x /opt/cmake-3.*your_version*.sh
-sudo bash /opt/cmake-3.*your_version.sh*
-sudo ln -s /opt/cmake-3.*your_version*/bin/* /usr/local/bin
+cd /opt
+sudo chmod +x cmake-3.*your_version*.sh
+sudo bash cmake-3.*your_version.sh*
+sudo ln -s cmake-3.*your_version*/bin/* /usr/local/bin
 ```
 
 6. Install python dependencies:
@@ -52,3 +53,18 @@ sudo ln -s /opt/cmake-3.*your_version*/bin/* /usr/local/bin
 sudo apt install python3-pip
 pip3 install rospkg dataclasses scipy numpy pyqtgraph
 ```
+
+7. Further useful setup:
+add at the end of your .bashrc file:
+```bash
+source /opt/ros/melodic/setup.bash
+source ~/catkin_ws/devel/setup.sh
+```
+To run ROS across multiple machines, also add:
+```bash
+export ROS_IP=*your local IP*
+export ROS_MASTER_URI=http://*your local IP*:11311
+```
+
+Use an environment loader to do the exports on the local machine (see onboard_interface for examples)
+
