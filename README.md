@@ -54,13 +54,17 @@ sudo apt install python3-pip
 pip3 install rospkg dataclasses scipy numpy pyqtgraph
 ```
 
-# 
+7. Further useful setup:
 add at the end of your .bashrc file:
+```bash
 source /opt/ros/melodic/setup.bash
 source ~/catkin_ws/devel/setup.sh
+```
+To run ROS across multiple machines, also add:
+```bash
+export ROS_IP=*your local IP*
+export ROS_MASTER_URI=http://*your local IP*:11311
+```
 
-to run across multiple machin, also add:
-export ROS_IP=*your local ip*
-export ROS_MASTER_URI=http://*your local ip*:11311
-
+Use an environment loader to do the exports on the local machine (see onboard_interface for examples)
 

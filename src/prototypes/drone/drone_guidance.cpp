@@ -88,8 +88,8 @@ int main(int argc, char **argv) {
         } else if (current_fsm.state_machine.compare("Launch") == 0) {
             ROS_INFO("%f", current_fsm.time_now);
             if (current_fsm.time_now < 5) current_target_apogee << 5, 0, 10;
-//            else if (current_fsm.time_now < 10) current_target_apogee << 5, 0, 0;
-//            else if (current_fsm.time_now < 16) current_target_apogee << -20, 30, 40;
+            else if (current_fsm.time_now < 10) current_target_apogee << 5, 0, 0;
+            else if (current_fsm.time_now < 19) current_target_apogee << -10, 30, 20;
             else{
                 std_msgs::String coast_command;
                 coast_command.data = "Coast";

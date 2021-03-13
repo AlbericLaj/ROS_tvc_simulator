@@ -15,7 +15,7 @@
 #include <sstream>
 #include <string>
 
-#define CONTROL_HORIZON 3// In seconds
+#define CONTROL_HORIZON 2// In seconds
 
 #include "polynomials/ebyshev.hpp"
 #include "control/continuous_ocp.hpp"
@@ -484,12 +484,12 @@ int main(int argc, char **argv) {
     //TODO change state constraints
     lbx << -inf, -inf, -1.0 / 100,
             -inf, -inf, -inf,
-            -0.183 - eps, -0.183 - eps, -0.183 - eps, -1 - eps,
+            -inf, -inf, -inf, -inf,
             -inf, -inf, -inf;
 
     ubx << inf, inf, inf,
             inf, inf, inf,
-            0.183 + eps, 0.183 + eps, 0.183 + eps, 1 + eps,
+            inf, inf, inf, inf,
             inf, inf, inf;
 
 //    lbx << -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf;
