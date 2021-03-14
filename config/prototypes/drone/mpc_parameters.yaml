@@ -1,0 +1,14 @@
+# MPC parameters
+state_costs:
+  x: 1.0e+5
+  dx: 1.0e+1
+  z: 1.0e+5
+  dz: 1.0e+1
+  att: 1.0e+1
+  datt: 1.0e+0
+input_costs:
+  servo: 1.0e+4
+  thrust: 1.0e+2
+  torque: 1.0e+3
+max_iter: 3
+line_search_max_iter: 4

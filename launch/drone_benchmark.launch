@@ -15,6 +15,10 @@
   <group ns="visualization">
     <rosparam file="$(find tvc_simulator)/config/prototypes/drone/visualization_parameters.yaml" />
   </group>
+
+  <group ns="mpc">
+    <rosparam file="$(find tvc_simulator)/config/prototypes/drone/mpc_parameters.yaml" />
+  </group>
   ''
 <!--  <node name="actuators_tests" pkg="tvc_simulator" type="actuators_tests.py" output="screen"/>-->
 

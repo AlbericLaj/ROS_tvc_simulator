@@ -5,3 +5,4 @@ log/log.bag
 log/log.bag.active
 rviz/rocket_GUI.perspective
 rviz/rocket_config.rviz
+.vscode/

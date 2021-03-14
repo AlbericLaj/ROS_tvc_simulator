@@ -24,7 +24,7 @@ add_definitions(-DEIGEN_STACK_ALLOCATION_LIMIT=1000000) # 1 MB
 
 
 add_subdirectory(submodule/polympc)
-include_directories(submodule/polympc/src src src/prototypes/drone)
+include_directories(submodule/polympc/src src src/prototypes/drone src/gnc)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -250,15 +250,15 @@ add_executable(time_keeper src/time_keeper.cpp)
 target_link_libraries(time_keeper ${catkin_LIBRARIES})
 add_dependencies(time_keeper ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
-add_executable(control src/control.cpp)
+add_executable(control src/gnc/control.cpp)
 target_link_libraries(control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
 add_dependencies(control ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
-add_executable(guidance src/guidance.cpp)
+add_executable(guidance src/gnc/guidance.cpp)
 target_link_libraries(guidance Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
 add_dependencies(guidance ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
-add_executable(data_fusion src/data_fusion.cpp)
+add_executable(data_fusion src/gnc/data_fusion.cpp)
 target_link_libraries(data_fusion ${catkin_LIBRARIES})
 add_dependencies(data_fusion ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
@@ -271,7 +271,8 @@ target_link_libraries(visualization ${catkin_LIBRARIES})
 add_dependencies(visualization ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 
-add_executable(drone_control src/prototypes/drone/drone_control.cpp)
+
+add_executable(drone_control src/prototypes/drone/drone_control.cpp src/gnc/mpc_utils.h src/gnc/rocket_model.h src/gnc/polympc_redef.hpp src/prototypes/drone/drone_model.h )
 target_link_libraries(drone_control Eigen3::Eigen OsqpEigen::OsqpEigen ${catkin_LIBRARIES})
 add_dependencies(drone_control ${${PROJECT_NAME}_EXPORTED_TARGETS})
 

@@ -19,17 +19,17 @@
 
 #define CONTROL_HORIZON 2 // In seconds
 
-#include "polynomials/ebyshev.hpp"
-#include "control/continuous_ocp.hpp"
-#include "polynomials/splines.hpp"
+#include "../../submodule/polympc/src/polynomials/ebyshev.hpp"
+#include "../../submodule/polympc/src/control/continuous_ocp.hpp"
+#include "../../submodule/polympc/src/polynomials/splines.hpp"
 
-#include "solvers/sqp_base.hpp"
-#include "solvers/box_admm.hpp"
-#include "solvers/admm.hpp"
-#include "solvers/osqp_interface.hpp"
+#include "../../submodule/polympc/src/solvers/sqp_base.hpp"
+#include "../../submodule/polympc/src/solvers/box_admm.hpp"
+#include "../../submodule/polympc/src/solvers/admm.hpp"
+#include "../../submodule/polympc/src/solvers/osqp_interface.hpp"
 
-#include "utils/helpers.hpp"
-#include "control/mpc_wrapper.hpp"
+#include "../../submodule/polympc/src/utils/helpers.hpp"
+#include "../../submodule/polympc/src/control/mpc_wrapper.hpp"
 
 #include <iomanip>
 #include <iostream>
